@@ -84,6 +84,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.3
         version: 19.0.3(@types/react@19.0.5)
+      '@types/react-resizable':
+        specifier: ^3.0.8
+        version: 3.0.8
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.3.4(vite@6.0.7(jiti@1.21.7)(yaml@2.7.0))
@@ -577,6 +580,9 @@ packages:
     resolution: {integrity: sha512-0Knk+HJiMP/qOZgMyNFamlIjw9OFCsyC2ZbigmEEyXXixgre6IQpm/4V+r3qH4GC1JPvRJKInw+on2rV6YZLeA==}
     peerDependencies:
       '@types/react': ^19.0.0
+
+  '@types/react-resizable@3.0.8':
+    resolution: {integrity: sha512-Pcvt2eGA7KNXldt1hkhVhAgZ8hK41m0mp89mFgQi7LAAEZiaLgm4fHJ5zbJZ/4m2LVaAyYrrRRv1LHDcrGQanA==}
 
   '@types/react@19.0.5':
     resolution: {integrity: sha512-i4OQzFiqsUCfoBns/KHpz+4QcvfjoCsTUi+mugo3lrSRA3+x0gJVvhZhAJrwLGEqz4EXiFVP4hPnOugx+m2uhg==}
@@ -1577,6 +1583,10 @@ snapshots:
   '@types/estree@1.0.6': {}
 
   '@types/react-dom@19.0.3(@types/react@19.0.5)':
+    dependencies:
+      '@types/react': 19.0.5
+
+  '@types/react-resizable@3.0.8':
     dependencies:
       '@types/react': 19.0.5
 

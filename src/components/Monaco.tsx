@@ -37,7 +37,7 @@ const MonacoEditorWrapper: React.FC<MonacoEditorProps> = ({
 
     // Configure editor settings
     editor.updateOptions({
-      fontSize: 14,
+      fontSize: 11,
       fontFamily: 'MonoLisa, Menlo, Monaco, "Courier New", monospace',
       minimap: {
         enabled: true,

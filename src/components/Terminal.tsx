@@ -26,7 +26,7 @@ type TerminalStatus = 'initializing' | 'ready' | 'error' | 'reconnecting';
 
 const TERMINAL_CONFIG = {
   fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-  fontSize: 14,
+  fontSize: 12,
   theme: {
     background: '#18181B',
     foreground: '#fafafa',
@@ -40,9 +40,9 @@ const TERMINAL_CONFIG = {
   convertEol: true,
 };
 
-const TerminalManager: React.FC<TerminalManagerProps> = ({ 
+const TerminalManager: React.FC<TerminalManagerProps> = ({
   className = '',
-  onStatusChange 
+  onStatusChange
 }) => {
   const [status, setStatus] = useState<TerminalStatus>('initializing');
   const [error, setError] = useState<string | null>(null);
@@ -69,9 +69,9 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
 
   const handleResize = useCallback(async (currentSessionId: string) => {
     if (!terminalRef.current || !currentSessionId) return;
-    
+
     window.clearTimeout(resizeTimeoutRef.current);
-    
+
     resizeTimeoutRef.current = window.setTimeout(() => {
       if (!fitAddonRef.current?.proposeDimensions()) return;
 
@@ -103,7 +103,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
     wrapper.style.position = 'relative';
     wrapper.style.minWidth = '640px';
     wrapper.style.minHeight = '384px';
-    
+
     containerRef.current.innerHTML = '';
     containerRef.current.appendChild(wrapper);
 
@@ -112,16 +112,16 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
       cols: 80,
       rows: 24
     });
-    
+
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new WebLinksAddon());
-    
+
     fitAddonRef.current = fitAddon;
     terminalRef.current = terminal;
 
     terminal.open(wrapper);
-    
+
     try {
       fitAddon.fit();
     } catch (e) {
@@ -133,7 +133,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
       if (resizeTimeoutRef.current) {
         window.clearTimeout(resizeTimeoutRef.current);
       }
-      
+
       resizeTimeoutRef.current = window.setTimeout(() => {
         if (fitAddonRef.current && terminal.element) {
           try {
@@ -152,8 +152,6 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
 
     resizeObserverRef.current = resizeObserver;
     resizeObserver.observe(wrapper);
-
-    terminal.write('\x1b[1;32mInitializing terminal...\x1b[0m\r\n');
 
     return terminal;
   }, [handleResize, sessionId]);
@@ -281,10 +279,10 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
   const handleRetry = useCallback(async () => {
     const maxRetries = 3;
     if (retrying || retryCountRef.current >= maxRetries) return;
-    
+
     setRetrying(true);
     retryCountRef.current += 1;
-    
+
     try {
       await cleanupTerminal(sessionId);
       await initializeSession();
@@ -313,11 +311,12 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
 
   return (
     <div className={`relative flex flex-col h-full ${className}`}>
-      <div 
-        ref={containerRef} 
-        className="flex-1 overflow-hidden bg-zinc-900/90 backdrop-blur-md rounded-lg border border-zinc-800/50"
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden bg-zinc-900/90 backdrop-blur-md border border-zinc-800/50"
       />
-      
+
+
       {status === 'error' && (
         <div className="absolute bottom-0 left-0 right-0 bg-red-500/10 p-4">
           <div className="flex items-center justify-between">
@@ -339,8 +338,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
           </div>
         </div>
       )}
-    </div>
-  );
+    </div>)
 };
 
 export default TerminalManager;

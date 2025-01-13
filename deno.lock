@@ -618,6 +618,7 @@
         "npm:@tauri-apps/plugin-opener@^2.2.3",
         "npm:@tauri-apps/plugin-os@^2.2.0",
         "npm:@types/react-dom@^19.0.3",
+        "npm:@types/react-resizable@^3.0.8",
         "npm:@types/react@^19.0.5",
         "npm:@vitejs/plugin-react@^4.3.4",
         "npm:@xterm/addon-fit@0.10",

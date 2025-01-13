@@ -136,11 +136,11 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   };
 
   return (
-    <div className={`h-full flex flex-col bg-zinc-900/90 rounded-lg backdrop-blur-md border border-zinc-800/50 ${className}`}>
+    <div className={`h-full flex flex-col bg-zinc-900/90 backdrop-blur-md border border-zinc-800/50 ${className}`}>
       {/* Header Section */}
       <div className="p-3 space-y-3 border-b border-zinc-800/80">
         <FolderPicker onFolderSelect={handleFolderSelect} />
-        <div className="flex items-center space-x-2 bg-zinc-800/50 rounded-lg px-3 py-1.5 backdrop-blur-sm">
+        <div className="flex items-center space-x-2 bg-zinc-800/50 rounded-lg px-3 pt-1.5 backdrop-blur-sm">
           <Search className="w-4 h-4 text-zinc-500" />
           <input
             type="text"

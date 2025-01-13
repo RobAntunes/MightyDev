@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import IntegratedFileBrowser from './FileBrowser';
 import MonacoEditor from './MonacoEditor';
 import ResizablePanel from './ResizablePanel';
+import { InfinityIcon } from 'lucide-react';
 
 interface FileSystemNode {
   id: string;
@@ -57,11 +58,12 @@ const IDEWorkspace: React.FC = () => {
   return (
     <div className="flex h-full bg-zinc-900">
       <ResizablePanel
-        defaultSize={300}
-        minSize={200}
-        maxSize={500}
-        direction="horizontal"
-        className="border-r border-zinc-800/50"
+      direction='horizontal'
+      position='left'
+      minWidth={200}
+      minHeight={Infinity}
+      initialHeight={Infinity}
+      initialWidth={300}
       >
         <IntegratedFileBrowser
           onFileSelect={handleFileSelect}

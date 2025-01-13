@@ -2,3 +2,51 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 @import 'xterm/css/xterm.css';
+
+/* File: src/global.css */
+
+/* Base styles for resize handles */
+.resizable-handle {
+    position: absolute;
+    background-color: transparent;
+  }
+  
+  .resizable-handle:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Visual indicators for handles */
+  .resizable-handle::after {
+    content: '';
+    position: absolute;
+    background-color: #a1a1aa; /* Tailwind's zinc-500 */
+  }
+  
+  /* Horizontal Handle Line */
+  .resizable-handle-horizontal::after {
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+  
+  /* Vertical Handle Line */
+  .resizable-handle-vertical::after {
+    left: 50%;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    transform: translateX(-50%);
+  }
+  
+  /* Corner Handle Diagonal Lines */
+  .resizable-handle-corner::after {
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    border-right: 1px solid #a1a1aa;
+    border-bottom: 1px solid #a1a1aa;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
