@@ -1,44 +1,27 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mighty",
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/tooling/cli/schema.json",
+  "productName": "Mighty IDE",
   "version": "0.1.0",
-  "identifier": "ai.mighty.app",
+  "identifier": "com.mighty.ide",
   "build": {
-    "beforeDevCommand": "deno task dev",
+    "frontendDist": "../src",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "deno task build",
-    "frontendDist": "../dist"
+    "beforeDevCommand": "deno task dev",
+    "beforeBuildCommand": "deno task build"
   },
   "app": {
     "windows": [
       {
-        "fullscreen": false,
-        "height": 600,
+        "label": "main",
+        "title": "Mighty IDE",
+        "width": 1200,
+        "height": 800,
         "resizable": true,
-        "title": "Mighty",
-        "width": 800
+        "fullscreen": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
-  },
-  "plugins": {
-    "fs": {
-      "scope": {
-        "allow": ["**"]
-      }
+      "csp": null
     }
   }
 }

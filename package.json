@@ -14,6 +14,7 @@
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-fs": "^2.2.0",
     "@tauri-apps/plugin-opener": "^2.2.3",
+    "@tauri-apps/plugin-os": "^2.2.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.15.0",
     "@xterm/addon-unicode11": "^0.8.0",
@@ -38,5 +39,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.7.3",
     "vite": "^6.0.7"
-  }
+  },
+  "pnpm.onlyBuiltDependencies": [
+    "esbuild"
+  ]
 }

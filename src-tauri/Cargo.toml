@@ -3,41 +3,32 @@ name = "mighty"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
+license = ""
+repository = ""
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "mighty_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
-
-
-[package.metadata.bundle]
-identifier = "com.your.app"
-resources = ["resources/*"]
+tauri-build = { version = "2.0.0-alpha.12", features = [] }
 
 [dependencies]
-tauri = { version = "^2.2.1", features = [] }
-tauri-plugin-opener = "2"
+nix = { version = "0.29.0", features = [ "term"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+tauri = { version = "2.0.0-alpha.17", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-os = "2.0.0-alpha"
 tokio = { version = "1.0", features = ["full"] }
-tokio-pty-process = "0.3"
-portable-pty = "0.8.1"
+portable-pty = "0.8"
 lazy_static = "1.4"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 notify = "5.0"
 futures = "0.3"
 async-trait = "0.1"
-libc = "0.2"
-
 
 [features]
-default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+default = ["custom-protocol"]

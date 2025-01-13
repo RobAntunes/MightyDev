@@ -1,22 +1,16 @@
-// src/main.rs
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands {
     pub mod fs;
     pub mod terminal;
-    pub mod terminal_session;
 }
 
-use commands::{fs, terminal, terminal_session};
-use std::sync::{Arc, Mutex};
+use commands::{fs, terminal};
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn main() {
-    let session_manager = Arc::new(Mutex::new(
-        terminal_session::SessionManager::new()
-    ));
-
+fn main() {
     tauri::Builder::default()
-        .manage(session_manager)
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
             // File system commands
             fs::read_directory,

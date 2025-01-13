@@ -615,6 +615,7 @@
         "npm:@tauri-apps/cli@^2.2.4",
         "npm:@tauri-apps/plugin-fs@^2.2.0",
         "npm:@tauri-apps/plugin-opener@^2.2.3",
+        "npm:@tauri-apps/plugin-os@^2.2.0",
         "npm:@types/react-dom@^19.0.3",
         "npm:@types/react@^19.0.5",
         "npm:@vitejs/plugin-react@^4.3.4",
