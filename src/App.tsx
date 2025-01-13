@@ -7,16 +7,13 @@ import {
   Maximize2,
   Minimize2,
   BrainCircuit,
-  Terminal,
-  TerminalIcon,
 } from "lucide-react";
 import ResizablePanel from "./components/ResizablePanel";
-import FileBrowser from "./components/FileBrowser";
+import FileBrowser from "./components/FileBrowser"; // IntegratedFileBrowser
 import FloatingActionBar from "./components/FloatingActionBar";
 import "./global.css";
 import ChatWorkspace from "./components/ChatWorkspace";
 import IDEWorkspace from "./components/IDEWorkspace";
-import MonacoEditor from "./components/MonacoEditor";
 import TerminalManager from "./components/Terminal";
 
 const AINativeIDE = () => {
@@ -28,7 +25,7 @@ const AINativeIDE = () => {
   const [currentCode, setCurrentCode] = useState<string>("");
 
   // Panel visibility states
-  const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(true);
+  const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(true); // FileBrowser
   const [isRightPanelVisible, setIsRightPanelVisible] = useState(true);
   const [isBottomPanelVisible, setIsBottomPanelVisible] = useState(true);
 
@@ -47,7 +44,7 @@ const AINativeIDE = () => {
   };
 
   return (
-    <div className="h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col">
+    <div className="h-screen w-screen bg-zinc-950 text-zinc-100 flex flex-col">
       {/* Top Bar */}
       <div className="h-12 bg-zinc-900/80 backdrop-blur-md flex items-center justify-between px-4 border-b border-zinc-800/50">
         <div className="flex items-center space-x-3">
@@ -61,71 +58,87 @@ const AINativeIDE = () => {
             </span>
           </div>
         </div>
-        <button className="p-2 hover:bg-zinc-800/50 rounded-lg transition-all duration-200">
+        <button
+          className="p-2 hover:bg-zinc-800/50 rounded-lg transition-all duration-200"
+          onClick={() => setIsMaximized(!isMaximized)}
+        >
           {isMaximized ? (
-            <Minimize2
-              className="w-4 h-4"
-              onClick={() => setIsMaximized(false)}
-            />
+            <Minimize2 className="w-4 h-4" />
           ) : (
-            <Maximize2
-              className="w-4 h-4"
-              onClick={() => setIsMaximized(true)}
-            />
+            <Maximize2 className="w-4 h-4" />
           )}
         </button>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden">
         {/* Mode Switch Panel */}
         <div className="w-16 bg-zinc-900/80 backdrop-blur-md border-r border-zinc-800/50 flex flex-col items-center py-4 space-y-6">
           <button
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeMode === "natural"
+            className={`p-3 rounded-lg transition-all duration-200 ${activeMode === "natural"
                 ? "bg-lime-500/90 text-white"
                 : "text-zinc-500 hover:bg-zinc-800/50"
-            }`}
+              }`}
             onClick={() => setActiveMode("natural")}
           >
             <MessageSquare className="w-6 h-6" />
           </button>
           <button
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeMode === "technical"
+            className={`p-3 rounded-lg transition-all duration-200 ${activeMode === "technical"
                 ? "bg-lime-500/90 text-white"
                 : "text-zinc-500 hover:bg-zinc-800/50"
-            }`}
+              }`}
             onClick={() => setActiveMode("technical")}
           >
             <Code2 className="w-6 h-6" />
           </button>
           <button
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeView === "preview"
+            className={`p-3 rounded-lg transition-all duration-200 ${activeView === "preview"
                 ? "bg-lime-500/90 text-white"
                 : "text-zinc-500 hover:bg-zinc-800/50"
-            }`}
+              }`}
             onClick={() =>
-              setActiveView((prev) => (prev === "preview" ? "code" : "preview"))
+              setActiveView((prev) =>
+                prev === "preview" ? "code" : "preview"
+              )
             }
           >
             <MonitorPlay className="w-6 h-6" />
           </button>
         </div>
 
+        {/* File Browser Sidebar */}
+        {isLeftPanelVisible && (
+          <div className="w-64 bg-zinc-900/80 backdrop-blur-md border-r border-zinc-800/50 flex flex-col">
+            {/* Header for File Browser */}
+            <div className="p-3 border-b border-zinc-800/50">
+              <h2 className="text-lg font-light text-zinc-300">File Explorer</h2>
+            </div>
+            {/* File Browser Content */}
+            <div className="flex-1 overflow-y-auto">
+              <FileBrowser
+                onFileSelect={(node) => {
+                  // Handle file selection if needed
+                  console.log("Selected file:", node);
+                }}
+                className="h-full"
+              />
+            </div>
+          </div>
+        )}
+
+
         {/* Dynamic Content Area with Resizable Panels */}
-        <div className="flex-1 flex">
+        <div className="flex-1 flex overflow-hidden">
           {/* Main Content Panel */}
           <div className="flex-1 flex flex-col">
             {/* Editor/Content Area */}
             <div
-              className={`flex-1 ${
-                isBottomPanelVisible ? "border-b border-zinc-800/50" : ""
-              }`}
+              className={`flex-1 ${isBottomPanelVisible ? "border-b border-zinc-800/50" : ""
+                } overflow-hidden`}
             >
               {activeView === "preview" ? (
-                <div className="flex-1 bg-zinc-900/80 backdrop-blur-md">
+                <div className="flex-1 bg-zinc-900/80 backdrop-blur-md overflow-auto">
                   <div className="h-full flex items-center justify-center text-zinc-500">
                     {previewContent ? (
                       <div className="p-4">{previewContent}</div>
@@ -135,14 +148,14 @@ const AINativeIDE = () => {
                   </div>
                 </div>
               ) : activeMode === "natural" ? (
-                <div className="flex-1 bg-zinc-900/80 backdrop-blur-md h-full">
+                <div className="flex-1 bg-zinc-900/80 backdrop-blur-md overflow-auto">
                   <ChatWorkspace
                     onPreviewUpdate={handlePreviewUpdate}
                     onCodeUpdate={handleCodeUpdate}
                   />
                 </div>
               ) : (
-                <div className="flex-1 bg-zinc-900/80 backdrop-blur-md p-4 h-full">
+                <div className="bg-zinc-900/80 backdrop-blur-md p-4 h-full overflow-auto">
                   <IDEWorkspace />
                 </div>
               )}
@@ -153,11 +166,11 @@ const AINativeIDE = () => {
               <ResizablePanel
                 defaultSize={40}
                 minSize={40}
-                maxSize={300}
+                maxSize={1200}
                 collapseDirection="top"
                 direction="vertical"
               >
-                <div className="bg-zinc-900/80 backdrop-blur-md h-full">
+                <div className="bg-zinc-900/80 backdrop-blur-md h-full overflow-auto">
                   <TerminalManager />
                 </div>
               </ResizablePanel>
@@ -173,7 +186,7 @@ const AINativeIDE = () => {
               direction="horizontal"
               className="border-l border-zinc-800/50"
             >
-              <div className="h-full bg-zinc-900/80 backdrop-blur-md p-4">
+              <div className="h-full bg-zinc-900/80 backdrop-blur-md p-4 overflow-auto">
                 <h2 className="text-lg font-light text-zinc-300 mb-4">
                   Context
                 </h2>

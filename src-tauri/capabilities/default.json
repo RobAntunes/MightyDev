@@ -2,9 +2,28 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "dialog:allow-open",
+    "dialog:default",
+    "fs:default",
+    "fs:write-all",
+    "fs:read-all",
+    "fs:allow-create",
+    "fs:allow-copy-file",
+    "fs:allow-truncate",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-home-read",
+    "fs:allow-home-write",
+    "fs:allow-home-meta",
+    "fs:allow-home-write-recursive",
+    "fs:allow-home-read-recursive",
+    "fs:allow-home-meta-recursive",
+    "fs:allow-read-text-file-lines"
   ]
 }

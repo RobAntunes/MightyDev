@@ -139,7 +139,7 @@ const MonacoEditorWrapper: React.FC<MonacoEditorProps> = ({
   }, [monaco]);
 
   return (
-    <div className={`w-full h-full bg-zinc-900 ${className}`} {...wrapperProps}>
+    <div className={`w-full h-screen bg-zinc-900 ${className}`} {...wrapperProps}>
       <Editor
         defaultValue={defaultValue}
         defaultLanguage={defaultLanguage}

@@ -64,7 +64,6 @@ const IDEWorkspace: React.FC = () => {
         className="border-r border-zinc-800/50"
       >
         <IntegratedFileBrowser
-          rootPath="."
           onFileSelect={handleFileSelect}
         />
       </ResizablePanel>

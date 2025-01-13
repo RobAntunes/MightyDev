@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use nix::{
-    pty::{openpty, Winsize},
     libc,
+    pty::{openpty, Winsize},
     sys::termios::{self, InputFlags, LocalFlags, OutputFlags, SetArg, Termios},
 };
 use serde::{Deserialize, Serialize};
@@ -43,13 +43,14 @@ lazy_static! {
 
 fn configure_terminal(fd: &File) -> nix::Result<()> {
     let mut termios = termios::tcgetattr(fd)?;
-    
+
     // Disable both terminal echo and keyboard echo
-    termios.local_flags &= !(LocalFlags::ECHO | LocalFlags::ECHOE | LocalFlags::ECHOK | LocalFlags::ECHONL);
-    
+    termios.local_flags &=
+        !(LocalFlags::ECHO | LocalFlags::ECHOE | LocalFlags::ECHOK | LocalFlags::ECHONL);
+
     // Set the new attributes
     termios::tcsetattr(fd, SetArg::TCSANOW, &termios)?;
-    
+
     Ok(())
 }
 
@@ -74,7 +75,7 @@ pub async fn create_terminal_session(
 
     // Convert to File types for easier handling
     let master_file = unsafe { File::from_raw_fd(pty.master.as_raw_fd()) };
-    
+
     // Configure the master side of the PTY
     configure_terminal(&master_file).map_err(|e| e.to_string())?;
 
@@ -117,7 +118,7 @@ pub async fn create_terminal_session(
 
     // Fork process using libc for better control
     let pid = unsafe { libc::fork() };
-    
+
     match pid {
         -1 => Err("Failed to fork process".to_string()),
         0 => {
@@ -143,7 +144,7 @@ pub async fn create_terminal_session(
                     .map(|s| s.as_ptr())
                     .chain(std::iter::once(std::ptr::null()))
                     .collect();
-                
+
                 let path = std::ffi::CString::new(shell_path).unwrap();
                 libc::execvp(path.as_ptr(), args_ptr.as_mut_ptr())
             };
@@ -196,7 +197,9 @@ pub async fn write_to_terminal(session_id: String, data: String) -> Result<(), S
     let sessions = TERMINAL_SESSIONS.lock().unwrap();
     if let Some(terminal) = sessions.get(&session_id) {
         let mut writer = terminal.writer.lock().unwrap();
-        writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+        writer
+            .write_all(data.as_bytes())
+            .map_err(|e| e.to_string())?;
         writer.flush().map_err(|e| e.to_string())?;
         Ok(())
     } else {
@@ -246,7 +249,7 @@ pub async fn resize_terminal(session_id: String, cols: u16, rows: u16) -> Result
                 return Err("Failed to resize terminal".to_string());
             }
         }
-        
+
         Ok(())
     } else {
         Err("Terminal session not found".to_string())
