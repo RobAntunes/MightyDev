@@ -315,7 +315,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
     <div className={`relative flex flex-col h-full ${className}`}>
       <div 
         ref={containerRef} 
-        className="flex-1 overflow-hidden bg-zinc-900/90 backdrop-blur-md rounded-lg border border-zinc-800/50"
+        className="flex-1 overflow-scroll bg-zinc-900/90 backdrop-blur-md rounded-lg border border-zinc-800/50"
       />
       
       {status === 'error' && (
