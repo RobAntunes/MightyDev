@@ -1,9 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import IntegratedFileBrowser from './FileBrowser';
 import MonacoEditor from './MonacoEditor';
 import ResizablePanel from './ResizablePanel';
-import { InfinityIcon } from 'lucide-react';
 
 interface FileSystemNode {
   id: string;
@@ -22,54 +21,70 @@ interface FileSystemNode {
 const IDEWorkspace: React.FC = () => {
   const [currentFile, setCurrentFile] = useState<FileSystemNode | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
-  
+  const isMounted = useRef(true);
+
+  // Track component lifecycle
+  useEffect(() => {
+    isMounted.current = true;
+
+    return () => {
+      isMounted.current = false; // Set to false on unmount
+    };
+  }, []);
+
+  // Handle file selection
   const handleFileSelect = useCallback(async (node: FileSystemNode) => {
     if (node.type === 'file') {
       try {
         const content = await invoke<string>('read_file', { path: node.path });
-        setFileContent(content);
-        setCurrentFile(node);
+        if (isMounted.current) {
+          setFileContent(content);
+          setCurrentFile(node);
+        }
       } catch (error) {
         console.error('Error reading file:', error);
       }
     }
   }, []);
 
+  // Handle file content changes in the editor
   const handleFileChange = useCallback((content: string | undefined) => {
-    if (content !== undefined) {
+    if (isMounted.current && content !== undefined) {
       setFileContent(content);
     }
   }, []);
 
-  const handleFileSave = useCallback(async (content: string) => {
-    if (currentFile) {
-      try {
-        await invoke('write_file', { 
-          path: currentFile.path, 
-          content 
-        });
-        console.log('File saved successfully');
-      } catch (error) {
-        console.error('Error saving file:', error);
+  // Handle file saving
+  const handleFileSave = useCallback(
+    async (content: string) => {
+      if (currentFile) {
+        try {
+          await invoke('write_file', {
+            path: currentFile.path,
+            content,
+          });
+          console.log('File saved successfully');
+        } catch (error) {
+          console.error('Error saving file:', error);
+        }
       }
-    }
-  }, [currentFile]);
+    },
+    [currentFile]
+  );
 
   return (
     <div className="flex h-full bg-zinc-900">
       <ResizablePanel
-      direction='horizontal'
-      position='left'
-      minWidth={200}
-      minHeight={Infinity}
-      initialHeight={Infinity}
-      initialWidth={300}
+        direction="horizontal"
+        position="left"
+        minWidth={200}
+        minHeight={Infinity}
+        initialHeight={Infinity}
+        initialWidth={300}
       >
-        <IntegratedFileBrowser
-          onFileSelect={handleFileSelect}
-        />
+        <IntegratedFileBrowser onFileSelect={handleFileSelect} />
       </ResizablePanel>
-      
+
       <div className="flex-1">
         {currentFile ? (
           <MonacoEditor
