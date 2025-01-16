@@ -37,6 +37,7 @@ log = "0.4.25"
 env_logger = "0.11.6"
 chrono = "0.4.39"
 dotenvy = "0.15.7"
+rocksdb = "0.23.0"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

@@ -23,6 +23,7 @@ import "./global.css";
 import EventUI from "./components/EventUI";
 import { createEventBus } from "./classes/events/eventBus";
 import ChatWorkspace from "./components/ChatWorkspace";
+import StorageTest from "./components/test";
 
 const eventBus = createEventBus({
   "eventBusName": "main",
@@ -233,9 +234,15 @@ const AINativeIDE: React.FC = () => {
                   <IDEWorkspace />
                 </div>
               )
-              : (
+              : activeMode === "events"
+              ? (
                 <div className="bg-zinc-900/80 backdrop-blur-md p-4 h-full overflow-auto">
                   <EventUI eventBus={eventBus} />
+                </div>
+              )
+              : (
+                <div className="bg-zinc-900/80 backdrop-blur-md p-4 h-full overflow-auto">
+                  <StorageTest />
                 </div>
               )}
           </div>
