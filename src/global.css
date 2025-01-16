@@ -50,3 +50,9 @@
     border-bottom: 1px solid #a1a1aa;
     transform: translate(-50%, -50%) rotate(45deg);
   }
+
+  body {
+    background-color: rgb(9, 9, 11); /* matches bg-zinc-950 */
+    margin: 0;
+    padding: 0;
+  }
