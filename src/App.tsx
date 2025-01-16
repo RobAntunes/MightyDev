@@ -225,7 +225,9 @@ const AINativeIDE: React.FC = () => {
               : activeMode === "natural"
               ? (
                 <div className="h-full flex-1 bg-zinc-900/80 backdrop-blur-md overflow-auto">
-                  <ChatWorkspace />
+                  <ChatWorkspace 
+                    
+                  />
                 </div>
               )
               : activeMode === "technical"
