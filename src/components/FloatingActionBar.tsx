@@ -19,7 +19,7 @@ const FloatingActionBar = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="fixed bottom-8 right-8 flex flex-col items-end space-y-2">
+    <div className="fixed z-[50] bottom-8 right-8 flex flex-col items-end space-y-2">
       {/* Expanded Menu */}
       {isExpanded && (
         <div className="flex flex-col items-center space-y-2 mb-2 bg-zinc-900/90 backdrop-blur-md p-2 rounded-lg border border-zinc-800/50">

@@ -18,7 +18,7 @@ import {
   setActiveChat,
   storeChat,
 } from "../lib/rocksdb";
-import { eventSystem } from "../classes/events/EventSystem";
+import { eventSystem } from "../classes/events/manager";
 import { EventPayload } from "../types/events";
 
 export default function ChatWorkspace() {

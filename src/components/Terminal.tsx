@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { Terminal as XTerm } from 'xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import { invoke } from '@tauri-apps/api/core';
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
-import 'xterm/css/xterm.css';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Terminal as XTerm } from "xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import "xterm/css/xterm.css";
+import { invokeWithAuth } from "../lib/auth";
+import { useAuth0 } from "@auth0/auth0-react";
 
 interface TerminalManagerProps {
   className?: string;
@@ -22,29 +23,29 @@ interface TerminalOutput {
   data: string;
 }
 
-type TerminalStatus = 'initializing' | 'ready' | 'error' | 'reconnecting';
+type TerminalStatus = "initializing" | "ready" | "error" | "reconnecting";
 
 const TERMINAL_CONFIG = {
   fontFamily: 'Menlo, Monaco, "Courier New", monospace',
   fontSize: 12,
   theme: {
-    background: '#18181B',
-    foreground: '#fafafa',
-    cursor: '#84cc16',
-    selection: '#3f3f46',
+    background: "#18181B",
+    foreground: "#fafafa",
+    cursor: "#84cc16",
+    selection: "#3f3f46",
   },
   allowTransparency: true,
   scrollback: 10000,
   cursorBlink: true,
-  cursorStyle: 'block' as const,
+  cursorStyle: "block" as const,
   convertEol: true,
 };
 
 const TerminalManager: React.FC<TerminalManagerProps> = ({
-  className = '',
-  onStatusChange
+  className = "",
+  onStatusChange,
 }) => {
-  const [status, setStatus] = useState<TerminalStatus>('initializing');
+  const [status, setStatus] = useState<TerminalStatus>("initializing");
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -59,6 +60,8 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
   const mountedRef = useRef(true);
   const outputListenerRef = useRef<UnlistenFn | null>(null);
   const dataHandlerRef = useRef<{ dispose: () => void } | null>(null);
+
+  const auth0 = useAuth0();
 
   const updateStatus = useCallback((newStatus: TerminalStatus) => {
     if (mountedRef.current) {
@@ -77,11 +80,11 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
 
       const terminal = terminalRef.current;
       if (terminal?.element && terminal.cols && terminal.rows) {
-        invoke('resize_terminal', {
+        invokeWithAuth("resize_terminal", {
           sessionId: currentSessionId,
           cols: terminal.cols,
-          rows: terminal.rows
-        }).catch(console.error);
+          rows: terminal.rows,
+        }, auth0).catch(console.error);
       }
     }, 100);
   }, []);
@@ -95,22 +98,22 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
       terminalRef.current = null;
     }
 
-    const wrapper = document.createElement('div');
-    wrapper.style.width = '100%';
-    wrapper.style.height = '100%';
-    wrapper.style.padding = '10px';
-    wrapper.style.backgroundColor = 'transparent';
-    wrapper.style.position = 'relative';
-    wrapper.style.minWidth = '640px';
-    wrapper.style.minHeight = '384px';
+    const wrapper = document.createElement("div");
+    wrapper.style.width = "100%";
+    wrapper.style.height = "100%";
+    wrapper.style.padding = "10px";
+    wrapper.style.backgroundColor = "transparent";
+    wrapper.style.position = "relative";
+    wrapper.style.minWidth = "640px";
+    wrapper.style.minHeight = "384px";
 
-    containerRef.current.innerHTML = '';
+    containerRef.current.innerHTML = "";
     containerRef.current.appendChild(wrapper);
 
     const terminal = new XTerm({
       ...TERMINAL_CONFIG,
       cols: 80,
-      rows: 24
+      rows: 24,
     });
 
     const fitAddon = new FitAddon();
@@ -125,7 +128,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
     try {
       fitAddon.fit();
     } catch (e) {
-      console.warn('Initial fit failed:', e);
+      console.warn("Initial fit failed:", e);
     }
 
     // Set up resize observer
@@ -144,7 +147,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
               }
             }
           } catch (e) {
-            console.warn('Fit operation failed:', e);
+            console.warn("Fit operation failed:", e);
           }
         }
       }, 100);
@@ -158,7 +161,11 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
 
   const createSession = useCallback(async () => {
     try {
-      const session = await invoke<TerminalSession>('create_terminal_session');
+      const session = await invokeWithAuth(
+        "create_terminal_session",
+        {},
+        auth0,
+      );
       if (mountedRef.current) {
         setSessionId(session.id);
       }
@@ -184,18 +191,21 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
     // Set up new handlers
     dataHandlerRef.current = terminal.onData((data) => {
       if (currentSessionId) {
-        invoke('write_to_terminal', {
+        invokeWithAuth("write_to_terminal", {
           sessionId: currentSessionId,
-          data
-        }).catch(console.error);
+          data,
+        }, auth0).catch(console.error);
       }
     });
 
-    outputListenerRef.current = await listen<TerminalOutput>('terminal-output', (event) => {
-      if (event.payload.session_id === currentSessionId && terminal) {
-        terminal.write(event.payload.data);
-      }
-    });
+    outputListenerRef.current = await listen<TerminalOutput>(
+      "terminal-output",
+      (event) => {
+        if (event.payload.session_id === currentSessionId && terminal) {
+          terminal.write(event.payload.data);
+        }
+      },
+    );
 
     // Return cleanup function
     return async () => {
@@ -210,57 +220,62 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
     };
   }, []);
 
-  const cleanupTerminal = useCallback(async (currentSessionId: string | null) => {
-    window.clearTimeout(resizeTimeoutRef.current);
-    resizeTimeoutRef.current = 0;
+  const cleanupTerminal = useCallback(
+    async (currentSessionId: string | null) => {
+      window.clearTimeout(resizeTimeoutRef.current);
+      resizeTimeoutRef.current = 0;
 
-    if (resizeObserverRef.current) {
-      resizeObserverRef.current.disconnect();
-      resizeObserverRef.current = null;
-    }
-
-    // Clean up event handlers
-    if (dataHandlerRef.current) {
-      dataHandlerRef.current.dispose();
-      dataHandlerRef.current = null;
-    }
-    if (outputListenerRef.current) {
-      await outputListenerRef.current();
-      outputListenerRef.current = null;
-    }
-
-    if (terminalRef.current) {
-      terminalRef.current.dispose();
-      terminalRef.current = null;
-    }
-
-    if (currentSessionId) {
-      try {
-        await invoke('terminate_terminal_session', { sessionId: currentSessionId });
-      } catch (err) {
-        console.warn('Failed to terminate session:', err);
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
       }
-      if (mountedRef.current) {
-        setSessionId(null);
-      }
-    }
 
-    fitAddonRef.current = null;
-  }, []);
+      // Clean up event handlers
+      if (dataHandlerRef.current) {
+        dataHandlerRef.current.dispose();
+        dataHandlerRef.current = null;
+      }
+      if (outputListenerRef.current) {
+        await outputListenerRef.current();
+        outputListenerRef.current = null;
+      }
+
+      if (terminalRef.current) {
+        terminalRef.current.dispose();
+        terminalRef.current = null;
+      }
+
+      if (currentSessionId) {
+        try {
+          await invokeWithAuth("terminate_terminal_session", {
+            sessionId: currentSessionId,
+          }, auth0);
+        } catch (err) {
+          console.warn("Failed to terminate session:", err);
+        }
+        if (mountedRef.current) {
+          setSessionId(null);
+        }
+      }
+
+      fitAddonRef.current = null;
+    },
+    [],
+  );
 
   const initializeSession = useCallback(async () => {
     try {
-      updateStatus('initializing');
+      updateStatus("initializing");
       const terminal = initializeTerminal();
-      if (!terminal) throw new Error('Failed to initialize terminal');
+      if (!terminal) throw new Error("Failed to initialize terminal");
 
       const session = await createSession();
-      if (!session) throw new Error('Failed to create terminal session');
+      if (!session) throw new Error("Failed to create terminal session");
 
       const cleanup = await setupTerminalEvents(session.id);
 
       if (mountedRef.current) {
-        updateStatus('ready');
+        updateStatus("ready");
         setError(null);
         retryCountRef.current = 0;
         return cleanup;
@@ -271,7 +286,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
       if (mountedRef.current) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(errorMessage);
-        updateStatus('error');
+        updateStatus("error");
       }
     }
   }, [createSession, initializeTerminal, setupTerminalEvents, updateStatus]);
@@ -298,7 +313,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
     mountedRef.current = true;
     let cleanup: (() => void) | undefined;
 
-    initializeSession().then(result => {
+    initializeSession().then((result) => {
       cleanup = result;
     });
 
@@ -316,8 +331,7 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
         className="flex-1 overflow-hidden bg-zinc-900/90 backdrop-blur-md border border-zinc-800/50"
       />
 
-
-      {status === 'error' && (
+      {status === "error" && (
         <div className="absolute bottom-0 left-0 right-0 bg-red-500/10 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-red-400">
@@ -331,14 +345,17 @@ const TerminalManager: React.FC<TerminalManagerProps> = ({
                 className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 
                          rounded-lg text-red-400 transition-colors disabled:opacity-50"
               >
-                <RefreshCw className={`w-4 h-4 ${retrying ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`w-4 h-4 ${retrying ? "animate-spin" : ""}`}
+                />
                 <span>Retry Connection</span>
               </button>
             )}
           </div>
         </div>
       )}
-    </div>)
+    </div>
+  );
 };
 
 export default TerminalManager;

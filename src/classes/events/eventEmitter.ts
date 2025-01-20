@@ -1,15 +1,22 @@
-import {
-  EventBusMetrics,
-  EventCallback,
-  EventMap,
-  PublishOptions,
-  SubscribeOptions,
-} from "@/types/events";
+import { OrchestrationEventMap } from "@/types/agents/orchestration"; // or whichever path you keep your internal event map
+import { EventStatsManager } from "./eventBus";
+import { EventBusAdapter } from "@/types/events";
 
 export class CustomEventEmitter {
   private readonly listeners: Map<string, Array<(...args: any[]) => void>> =
     new Map();
   private maxListeners: number = 10;
+
+  // Attach stats manager so subclasses can use it
+  private readonly statsManager: EventStatsManager;
+
+  constructor() {
+    this.statsManager = new EventStatsManager();
+  }
+
+  protected getStatsManager(): EventStatsManager {
+    return this.statsManager;
+  }
 
   setMaxListeners(n: number): this {
     this.maxListeners = n;
@@ -20,58 +27,45 @@ export class CustomEventEmitter {
     return this.maxListeners;
   }
 
-  on<K extends keyof EventMap>(
-    event: K,
-    listener: (...args: EventMap[K]) => void,
-  ): this {
-    if (!this.listeners.has(event as string)) {
-      this.listeners.set(event as string, []);
+  on(event: string, listener: (...args: any[]) => void): this {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
     }
-    this.listeners.get(event as string)!.push(listener);
+    this.listeners.get(event)!.push(listener);
     return this;
   }
 
-  once<K extends keyof EventMap>(
-    event: K,
-    listener: (...args: EventMap[K]) => void,
-  ): this {
-    const onceWrapper = (...args: EventMap[K]) => {
+  once(event: string, listener: (...args: any[]) => void): this {
+    const onceWrapper = (...args: any[]) => {
       this.off(event, onceWrapper);
       listener.apply(this, args);
     };
     return this.on(event, onceWrapper);
   }
 
-  off<K extends keyof EventMap>(
-    event: K,
-    listener: (...args: EventMap[K]) => void,
-  ): this {
-    if (!this.listeners.has(event as string)) return this;
-
-    const eventListeners = this.listeners.get(event as string)!;
+  off(event: string, listener: (...args: any[]) => void): this {
+    if (!this.listeners.has(event)) return this;
+    const eventListeners = this.listeners.get(event)!;
     const index = eventListeners.indexOf(listener);
-
     if (index !== -1) {
       eventListeners.splice(index, 1);
       if (eventListeners.length === 0) {
-        this.listeners.delete(event as string);
+        this.listeners.delete(event);
       }
     }
     return this;
   }
 
-  emit<K extends keyof EventMap>(event: K, ...args: EventMap[K]): boolean {
-    if (!this.listeners.has(event as string)) return false;
-
-    const eventListeners = this.listeners.get(event as string)!;
+  emit(event: string, ...args: any[]): boolean {
+    if (!this.listeners.has(event)) return false;
+    const eventListeners = this.listeners.get(event)!;
     eventListeners.forEach((listener) => {
       try {
         listener.apply(this, args);
       } catch (error) {
-        console.error(`Error in event listener for ${String(event)}:`, error);
+        console.error(`Error in event listener for ${event}:`, error);
       }
     });
-
     return true;
   }
 
@@ -96,88 +90,19 @@ export class CustomEventEmitter {
     return Array.from(this.listeners.keys());
   }
 
-  prependListener<K extends keyof EventMap>(
-    event: K,
-    listener: (...args: EventMap[K]) => void,
-  ): this {
-    if (!this.listeners.has(event as string)) {
-      this.listeners.set(event as string, []);
+  prependListener(event: string, listener: (...args: any[]) => void): this {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
     }
-    this.listeners.get(event as string)!.unshift(listener);
+    this.listeners.get(event)!.unshift(listener);
     return this;
   }
 
-  prependOnceListener<K extends keyof EventMap>(
-    event: K,
-    listener: (...args: EventMap[K]) => void,
-  ): this {
-    const onceWrapper = (...args: EventMap[K]) => {
+  prependOnceListener(event: string, listener: (...args: any[]) => void): this {
+    const onceWrapper = (...args: any[]) => {
       this.off(event, onceWrapper);
       listener.apply(this, args);
     };
     return this.prependListener(event, onceWrapper);
-  }
-}
-
-// EventBusAdapter interface with proper typing
-export interface EventBusAdapter {
-  readonly metrics: EventBusMetrics;
-
-  on(event: string | symbol, listener: (...args: any[]) => void): this;
-  once(event: string | symbol, listener: (...args: any[]) => void): this;
-  off(event: string | symbol, listener: (...args: any[]) => void): this;
-  emit(event: string | symbol, ...args: any[]): boolean;
-  removeAllListeners(event?: string | symbol): this;
-  listenerCount(event: string | symbol): number;
-  rawListeners(event: string | symbol): Function[];
-  eventNames(): Array<string | symbol>;
-  prependListener(
-    event: string | symbol,
-    listener: (...args: any[]) => void,
-  ): this;
-  prependOnceListener(
-    event: string | symbol,
-    listener: (...args: any[]) => void,
-  ): this;
-
-  publish<T>(
-    topic: string,
-    data: T,
-    source: string,
-    options?: PublishOptions,
-  ): Promise<void>;
-
-  subscribe(
-    topic: string,
-    callback: EventCallback,
-    options?: SubscribeOptions,
-  ): Promise<string>;
-
-  unsubscribe(subscriptionId: string): Promise<void>;
-}
-
-// Error types
-export class EventBusError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly originalError?: unknown,
-  ) {
-    super(message);
-    this.name = "EventBusError";
-  }
-}
-
-export class PublishError extends EventBusError {
-  constructor(message: string, originalError?: unknown) {
-    super(message, "PUBLISH_ERROR", originalError);
-    this.name = "PublishError";
-  }
-}
-
-export class SubscriptionError extends EventBusError {
-  constructor(message: string, originalError?: unknown) {
-    super(message, "SUBSCRIPTION_ERROR", originalError);
-    this.name = "SubscriptionError";
   }
 }

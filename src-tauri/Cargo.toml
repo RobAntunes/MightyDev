@@ -2,18 +2,20 @@
 name = "mighty"
 version = "0.1.0"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["Roberto Antunes"]
 license = ""
 repository = ""
 edition = "2021"
 
-[lib]
-name = "mighty_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Remove the [lib] section completely
+# [lib]
+# name = "mighty_lib"
+# crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.0.0-alpha.12", features = [] }
 
+# Rest of your dependencies remain the same
 [dependencies]
 nix = { version = "0.29.0", features = ["term"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -22,7 +24,7 @@ tauri = { version = "2.2.2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-os = "2.0.0"
 tauri-plugin-dialog = "2.0.0"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.0", features = ["full", "rt-multi-thread", "macros"] }
 portable-pty = "0.8"
 lazy_static = "1.4"
 uuid = { version = "1.0", features = ["v4", "serde"] }
@@ -35,9 +37,25 @@ reqwest = "0.12.12"
 http = "1.2.0"
 log = "0.4.25"
 env_logger = "0.11.6"
-chrono = "0.4.39"
+chrono = { version = "0.4.39", features = ["serde"] }
 dotenvy = "0.15.7"
 rocksdb = "0.23.0"
+thiserror = "2.0.11"
+toml = "0.8.19"
+parking_lot = "0.12.3"
+lance-index = "0.22.0"
+lancedb = { git = "https://github.com/lancedb/lancedb.git", tag = "v0.15.0" }
+anyhow = "1.0.95"
+once_cell = "1.20.2"
+pyo3 = { version = "0.23.4", features = ['auto-initialize'] }
+lru = "0.12.5"
+arrow = "53.3.0"
+regex = "1.11.1"
+sysinfo = "0.33.1"
+ctrlc = "3.4.5"
+glob = "0.3.2"
+
+[package.metadata.pyo3]
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

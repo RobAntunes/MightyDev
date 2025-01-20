@@ -3,6 +3,7 @@
 import { Message } from "./messages";
 import { EventBusAdapter } from "./events";
 import { UUID } from "crypto";
+import { Auth0ContextInterface } from "@auth0/auth0-react";
 
 export interface ModelConfig {
     provider: "anthropic" | "openai";
@@ -78,6 +79,7 @@ export abstract class AIService {
     abstract initialize(): Promise<void>;
     abstract getCompletion(
         request: CompletionRequest,
+        auth0: Auth0ContextInterface,
     ): Promise<CompletionResponse>;
     abstract streamCompletion(
         request: CompletionRequest,

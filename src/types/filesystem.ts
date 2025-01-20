@@ -1,16 +1,17 @@
-import { invoke } from '@tauri-apps/api/core';
-import { UnlistenFn } from '@tauri-apps/api/event';
+import { invokeWithAuth } from "../lib/auth";
+import { Auth0ContextInterface } from "@auth0/auth0-react";
+import { UnlistenFn } from "@tauri-apps/api/event";
 
 export interface FileSystemNode {
   id: string;
   name: string;
-  type: 'file' | 'directory';
+  type: "file" | "directory";
   path: string;
-  metadata: FileMetadata;
+  metadata: FSFileMetadata;
   children?: FileSystemNode[];
 }
 
-export interface FileMetadata {
+export interface FSFileMetadata {
   createdAt: string;
   modifiedAt: string;
   size: number;
@@ -24,7 +25,7 @@ export interface FileSystemError {
 }
 
 export interface FileSystemEvents {
-  onChange: (path: string, type: 'create' | 'modify' | 'delete') => void;
+  onChange: (path: string, type: "create" | "modify" | "delete") => void;
   onError: (error: FileSystemError) => void;
 }
 
@@ -34,163 +35,259 @@ export interface FileSystemOptions {
 }
 
 export interface FileSystemOperations {
-  readDirectory(path: string, options?: FileSystemOptions): Promise<FileSystemNode[]>;
-  readFile(path: string): Promise<Uint8Array>;
-  readTextFile(path: string): Promise<string>;
-  writeFile(path: string, data: Uint8Array): Promise<void>;
-  writeTextFile(path: string, contents: string): Promise<void>;
-  createDirectory(path: string, options?: FileSystemOptions): Promise<void>;
-  exists(path: string): Promise<boolean>;
-  delete(path: string, options?: FileSystemOptions): Promise<void>;
-  rename(oldPath: string, newPath: string): Promise<void>;
-  copyFile(source: string, destination: string): Promise<void>;
-  metadata(path: string): Promise<FileMetadata>;
-  watch(path: string, events: FileSystemEvents): Promise<() => void>;
+  readDirectory(
+    path: string,
+    auth0: Auth0ContextInterface,
+    options?: FileSystemOptions,
+  ): Promise<FileSystemNode[]>;
+  readFile(path: string, auth0: Auth0ContextInterface): Promise<Uint8Array>;
+  readTextFile(path: string, auth0: Auth0ContextInterface): Promise<string>;
+  writeFile(
+    path: string,
+    data: Uint8Array,
+    auth0: Auth0ContextInterface,
+  ): Promise<void>;
+  writeTextFile(
+    path: string,
+    contents: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<void>;
+  createDirectory(
+    path: string,
+    auth0: Auth0ContextInterface,
+    options?: FileSystemOptions,
+  ): Promise<void>;
+  exists(path: string, auth0: Auth0ContextInterface): Promise<boolean>;
+  delete(
+    path: string,
+    auth0: Auth0ContextInterface,
+    options?: FileSystemOptions,
+  ): Promise<void>;
+  rename(
+    oldPath: string,
+    newPath: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<void>;
+  copyFile(
+    source: string,
+    destination: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<void>;
+  metadata(path: string, auth0: Auth0ContextInterface): Promise<FSFileMetadata>;
+  watch(
+    path: string,
+    events: FileSystemEvents,
+    auth0: Auth0ContextInterface,
+  ): Promise<() => void>;
 }
 
 export class TauriFileSystem implements FileSystemOperations {
   private watchHandlers: Map<string, UnlistenFn> = new Map();
 
-  async readDirectory(path: string, options?: FileSystemOptions): Promise<FileSystemNode[]> {
+  async readDirectory(
+    path: string,
+    auth0: Auth0ContextInterface,
+    options?: FileSystemOptions,
+  ): Promise<FileSystemNode[]> {
     try {
-      const entries = await invoke<FileSystemNode[]>('plugin:fs|read_dir', {
-        path,
-        options
-      });
+      const entries = await invokeWithAuth(
+        "plugin:fs|read_dir",
+        {
+          path,
+          options,
+        },
+        auth0,
+      );
       return entries;
     } catch (error) {
-      throw this.handleError(error, 'Failed to read directory');
+      throw this.handleError(error, "Failed to read directory");
     }
   }
 
-  async readFile(path: string): Promise<Uint8Array> {
+  async readFile(
+    path: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<Uint8Array> {
     try {
-      const result = await invoke<number[]>('plugin:fs|read_file', { path });
+      const result = await invokeWithAuth(
+        "plugin:fs|read_file",
+        { path },
+        auth0,
+      );
       return new Uint8Array(result);
     } catch (error) {
-      throw this.handleError(error, 'Failed to read file');
+      throw this.handleError(error, "Failed to read file");
     }
   }
 
-  async readTextFile(path: string): Promise<string> {
+  async readTextFile(
+    path: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<string> {
     try {
-      return await invoke<string>('plugin:fs|read_text_file', { path });
+      return await invokeWithAuth("plugin:fs|read_text_file", { path }, auth0);
     } catch (error) {
-      throw this.handleError(error, 'Failed to read text file');
+      throw this.handleError(error, "Failed to read text file");
     }
   }
 
-  async writeFile(path: string, data: Uint8Array): Promise<void> {
+  async writeFile(
+    path: string,
+    data: Uint8Array,
+    auth0: Auth0ContextInterface,
+  ): Promise<void> {
     try {
-      await invoke('plugin:fs|write_file', {
+      await invokeWithAuth("plugin:fs|write_file", {
         path,
-        data: Array.from(data)
-      });
+        data: Array.from(data),
+      }, auth0);
     } catch (error) {
-      throw this.handleError(error, 'Failed to write file');
+      throw this.handleError(error, "Failed to write file");
     }
   }
 
-  async writeTextFile(path: string, contents: string): Promise<void> {
+  async writeTextFile(
+    path: string,
+    contents: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<void> {
     try {
-      await invoke('plugin:fs|write_text_file', { path, contents });
+      await invokeWithAuth(
+        "plugin:fs|write_text_file",
+        { path, contents },
+        auth0,
+      );
     } catch (error) {
-      throw this.handleError(error, 'Failed to write text file');
+      throw this.handleError(error, "Failed to write text file");
     }
   }
 
-  async createDirectory(path: string, options?: FileSystemOptions): Promise<void> {
+  async createDirectory(
+    path: string,
+    auth0: Auth0ContextInterface,
+    options?: FileSystemOptions,
+  ): Promise<void> {
     try {
-      await invoke('plugin:fs|create_dir', { path, options });
+      await invokeWithAuth("plugin:fs|create_dir", { path, options }, auth0);
     } catch (error) {
-      throw this.handleError(error, 'Failed to create directory');
+      throw this.handleError(error, "Failed to create directory");
     }
   }
 
-  async exists(path: string): Promise<boolean> {
+  async exists(path: string, auth0: Auth0ContextInterface): Promise<boolean> {
     try {
-      return await invoke<boolean>('plugin:fs|exists', { path });
+      return await invokeWithAuth("plugin:fs|exists", { path }, auth0);
     } catch (error) {
-      throw this.handleError(error, 'Failed to check existence');
+      throw this.handleError(error, "Failed to check existence");
     }
   }
 
-  async delete(path: string, options?: FileSystemOptions): Promise<void> {
+  async delete(
+    path: string,
+    auth0: Auth0ContextInterface,
+    options?: FileSystemOptions,
+  ): Promise<void> {
     try {
-      const metadata = await this.metadata(path);
-      const stats = await invoke<{ isDir: boolean }>('plugin:fs|metadata', { path });
+      // const metadata = await this.metadata(path, auth0);
+      const stats = await invokeWithAuth("plugin:fs|metadata", {
+        path,
+      }, auth0);
       if (stats.isDir) {
-        await invoke('plugin:fs|remove_dir', { 
+        await invokeWithAuth("plugin:fs|remove_dir", {
           path,
-          options: { ...options, recursive: true }
-        });
+          options: { ...options, recursive: true },
+        }, auth0);
       } else {
-        await invoke('plugin:fs|remove_file', { path });
+        await invokeWithAuth("plugin:fs|remove_file", { path }, auth0);
       }
     } catch (error) {
-      throw this.handleError(error, 'Failed to delete path');
+      throw this.handleError(error, "Failed to delete path");
     }
   }
 
-  async rename(oldPath: string, newPath: string): Promise<void> {
+  async rename(
+    oldPath: string,
+    newPath: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<void> {
     try {
-      await invoke('plugin:fs|rename', { from: oldPath, to: newPath });
+      await invokeWithAuth(
+        "plugin:fs|rename",
+        { from: oldPath, to: newPath },
+        auth0,
+      );
     } catch (error) {
-      throw this.handleError(error, 'Failed to rename path');
+      throw this.handleError(error, "Failed to rename path");
     }
   }
 
-  async copyFile(source: string, destination: string): Promise<void> {
+  async copyFile(
+    source: string,
+    destination: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<void> {
     try {
-      await invoke('plugin:fs|copy_file', { from: source, to: destination });
+      await invokeWithAuth("plugin:fs|copy_file", {
+        from: source,
+        to: destination,
+      }, auth0);
     } catch (error) {
-      throw this.handleError(error, 'Failed to copy file');
+      throw this.handleError(error, "Failed to copy file");
     }
   }
 
-  async metadata(path: string): Promise<FileMetadata> {
+  async metadata(
+    path: string,
+    auth0: Auth0ContextInterface,
+  ): Promise<FSFileMetadata> {
     try {
-      return await invoke<FileMetadata>('plugin:fs|metadata', { path });
+      return await invokeWithAuth("plugin:fs|metadata", { path }, auth0);
     } catch (error) {
-      throw this.handleError(error, 'Failed to get file metadata');
+      throw this.handleError(error, "Failed to get file metadata");
     }
   }
 
-  async watch(path: string, events: FileSystemEvents): Promise<() => void> {
+  async watch(
+    path: string,
+    events: FileSystemEvents,
+    auth0: Auth0ContextInterface,
+  ): Promise<() => void> {
     try {
       // Using Tauri's event system for file watching
-      const unlistenFn = await invoke<UnlistenFn>('plugin:fs|watch', {
+      const unlistenFn = await invokeWithAuth("plugin:fs|watch", {
         path,
         handler: (event: { type: string; path: string }) => {
           const eventType = this.mapWatchEventType(event.type);
           if (eventType) {
             events.onChange(event.path, eventType);
           }
-        }
-      });
+        },
+      }, auth0);
 
       this.watchHandlers.set(path, unlistenFn);
-      
+
       return async () => {
         const unlistenFn = this.watchHandlers.get(path);
         if (unlistenFn) {
-          await unlistenFn();
+          unlistenFn();
           this.watchHandlers.delete(path);
         }
       };
     } catch (error) {
-      const fsError = this.handleError(error, 'Failed to watch path');
+      const fsError = this.handleError(error, "Failed to watch path");
       events.onError(fsError);
       return () => Promise.resolve();
     }
   }
 
-  private mapWatchEventType(type: string): 'create' | 'modify' | 'delete' | undefined {
-    const eventMap: Record<string, 'create' | 'modify' | 'delete'> = {
-      'create': 'create',
-      'modify': 'modify',
-      'remove': 'delete',
-      'rename': 'modify'
+  private mapWatchEventType(
+    type: string,
+  ): "create" | "modify" | "delete" | undefined {
+    const eventMap: Record<string, "create" | "modify" | "delete"> = {
+      "create": "create",
+      "modify": "modify",
+      "remove": "delete",
+      "rename": "modify",
     };
     return eventMap[type.toLowerCase()];
   }
@@ -198,13 +295,13 @@ export class TauriFileSystem implements FileSystemOperations {
   private handleError(error: unknown, defaultMessage: string): FileSystemError {
     if (error instanceof Error) {
       return {
-        code: 'UNKNOWN_ERROR',
-        message: error.message
+        code: "UNKNOWN_ERROR",
+        message: error.message,
       };
     }
     return {
-      code: 'UNKNOWN_ERROR',
-      message: defaultMessage
+      code: "UNKNOWN_ERROR",
+      message: defaultMessage,
     };
   }
 }

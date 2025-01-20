@@ -6,6 +6,14 @@ use std::path::PathBuf;
 use std::{fs, os::unix::fs::PermissionsExt, path::Path, sync::mpsc, time::SystemTime};
 use tauri::{command, Emitter, Manager, Runtime, WebviewWindow};
 
+// File watcher configuration
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
+use std::sync::Arc;
+
+static FILE_WATCHER: Lazy<Arc<Mutex<Option<FileWatcher>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileSystemNode {
     id: String,
@@ -51,15 +59,80 @@ impl FileSystemError {
     }
 }
 
+// Enhanced file watcher configuration
+pub struct FileWatcher {
+    watcher: notify::RecommendedWatcher,
+    _tx: mpsc::Sender<Event>,
+}
+
+impl FileWatcher {
+    pub fn new() -> notify::Result<Self> {
+        let (tx, rx) = mpsc::channel();
+
+        let tx_clone = tx.clone();
+        let watcher = notify::RecommendedWatcher::new(
+            move |res: notify::Result<Event>| {
+                if let Ok(event) = res {
+                    // Filter out events we want to ignore
+                    if !should_ignore_event(&event) {
+                        let _ = tx_clone.send(event);
+                    }
+                }
+            },
+            notify::Config::default(),
+        )?;
+
+        Ok(Self { watcher, _tx: tx })
+    }
+
+    pub fn watch<P: AsRef<Path>>(&mut self, path: P) -> notify::Result<()> {
+        self.watcher.watch(path.as_ref(), RecursiveMode::Recursive)
+    }
+}
+
+fn should_ignore_event(event: &Event) -> bool {
+    event.paths.iter().any(|path| should_ignore_path(path))
+}
+
+fn should_ignore_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    let ignore_patterns = [
+        "__pycache__",
+        "/venv/",
+        ".pyc",
+        "/.pytest_cache/",
+        "/target/",
+        "/.git/",
+        "/node_modules/",
+        ".DS_Store",
+        "/storage/",
+        "/storage.db/",
+        ".db",
+        "LOCK",
+        ".wal",
+    ];
+
+    ignore_patterns
+        .iter()
+        .any(|pattern| path_str.contains(pattern))
+}
+
+// Initialize the file watcher
+pub fn initialize_watcher() -> Result<(), Box<dyn std::error::Error>> {
+    let mut watcher = FileWatcher::new()?;
+    let project_root = get_project_root();
+    watcher.watch(project_root)?;
+
+    *FILE_WATCHER.lock() = Some(watcher);
+    Ok(())
+}
+
 // Function to get the project root directory
 fn get_project_root() -> PathBuf {
-    // First, try to get the current working directory
     let current_dir = env::current_dir().expect("Failed to get current directory");
 
-    // Look for common project root indicators
     let mut dir = current_dir.as_path();
     while let Some(parent) = dir.parent() {
-        // Check for common project files/folders
         if dir.join("package.json").exists()
             || dir.join("Cargo.toml").exists()
             || dir.join(".git").exists()
@@ -70,7 +143,6 @@ fn get_project_root() -> PathBuf {
         dir = parent;
     }
 
-    // If no project root indicators found, return the current directory
     current_dir
 }
 
@@ -122,6 +194,11 @@ pub async fn read_directory(path: String) -> Result<Vec<FileSystemNode>, FileSys
             .map_err(|e| FileSystemError::with_path("ENTRY_ERROR", &e.to_string(), &full_path))?;
         let path = entry.path();
 
+        // Skip ignored files and directories
+        if should_ignore_path(&path) {
+            continue;
+        }
+
         // Make path relative to project root for consistency
         let relative_path = path
             .strip_prefix(&project_root)
@@ -148,7 +225,6 @@ pub async fn read_directory(path: String) -> Result<Vec<FileSystemNode>, FileSys
         nodes.push(node);
     }
 
-    // Sort nodes: directories first, then files, both alphabetically
     nodes.sort_by(|a, b| match (a.node_type.as_str(), b.node_type.as_str()) {
         ("directory", "file") => std::cmp::Ordering::Less,
         ("file", "directory") => std::cmp::Ordering::Greater,
@@ -244,55 +320,15 @@ pub async fn rename_path(old_path: String, new_path: String) -> Result<(), FileS
         .map_err(|e| FileSystemError::with_path("RENAME_ERROR", &e.to_string(), &old_full_path))
 }
 
-pub fn setup_fs_watcher<R: Runtime>(
-    window: WebviewWindow<R>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let (tx, rx) = mpsc::channel();
-    let project_root = get_project_root();
-
-    let mut watcher =
-        notify::recommended_watcher(move |res: Result<Event, notify::Error>| match res {
-            Ok(event) => {
-                let _ = tx.send(event);
-            }
-            Err(e) => println!("Watch error: {:?}", e),
-        })?;
-
-    // Watch the project root directory instead of the current directory
-    watcher.watch(&project_root, RecursiveMode::Recursive)?;
-
-    // Handle file system events
-    std::thread::spawn(move || {
-        for event in rx {
-            let event_type = match event.kind {
-                notify::EventKind::Create(_) => "create",
-                notify::EventKind::Modify(_) => "modify",
-                notify::EventKind::Remove(_) => "delete",
-                _ => continue,
-            };
-
-            // Send event to frontend with paths relative to project root
-            for path in event.paths {
-                if let Ok(relative_path) = path.strip_prefix(&project_root) {
-                    let _ = window.emit(
-                        "fs-change",
-                        json!({
-                            "type": event_type,
-                            "path": relative_path.to_string_lossy().to_string()
-                        }),
-                    );
-                }
-            }
-        }
-    });
-
+// Initialize function to be called at startup
+pub fn initialize_fs() -> Result<(), Box<dyn std::error::Error>> {
+    initialize_watcher()?;
     Ok(())
 }
 
-// Register commands with Tauri
-pub fn register<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
-    // Setup file system watcher
-    setup_fs_watcher(app.get_webview_window("main").unwrap())?;
-
-    Ok(())
+// Cleanup function to be called on shutdown
+pub fn cleanup_fs() {
+    if let Some(_watcher) = FILE_WATCHER.lock().take() {
+        // The watcher will be dropped here, cleaning up its resources
+    }
 }

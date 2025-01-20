@@ -1,6 +1,4 @@
 // src/services/ai/AnthropicService.ts
-
-import { invoke } from "@tauri-apps/api/core";
 import {
     AIService,
     AIServiceConfig,
@@ -10,8 +8,9 @@ import {
     ConversationContext,
 } from "../../types/ai";
 import { Message } from "../../types/messages";
-import { message } from "@tauri-apps/plugin-dialog";
-import { eventSystem } from "../../classes/events/EventSystem";
+import { eventSystem } from "../../classes/events/manager";
+import { invokeWithAuth } from "../../lib/auth";
+import { Auth0ContextInterface, withAuth0 } from "@auth0/auth0-react";
 
 // Each message must be { role: "user" | "assistant", content: string }
 interface AnthropicMessage {
@@ -24,11 +23,13 @@ interface AnthropicRequest {
     model: string;
     max_tokens: number;
     messages: AnthropicMessage[];
+    auth0: Auth0ContextInterface,
 }
 
 export class AnthropicService implements AIService {
     private config: AIServiceConfig;
     private initialized = false;
+    public auth0 = {};
 
     // If you no longer need context-tracking, feel free to remove
     private context: ConversationContext = {
@@ -44,8 +45,9 @@ export class AnthropicService implements AIService {
         },
     };
 
-    constructor(config: AIServiceConfig) {
+    constructor(config: AIServiceConfig, auth0: Auth0ContextInterface) {
         this.config = config;
+        this.auth0 = auth0;
     }
 
     /**
@@ -83,6 +85,7 @@ export class AnthropicService implements AIService {
      */
     async getCompletion(
         request: CompletionRequest,
+        auth0: Auth0ContextInterface,
     ): Promise<CompletionResponse> {
         if (!this.initialized) {
             throw new Error("AnthropicService: Not initialized");
@@ -100,15 +103,16 @@ export class AnthropicService implements AIService {
                 model: this.config.model?.model || "claude-3-5-sonnet-20241022",
                 max_tokens: request.maxTokens || 1024,
                 messages: anthropicMessages,
+                auth0
             };
 
             console.log("Sending to Anthropic:", anthropicRequest);
 
             // 3) Call Tauri’s Rust command, which calls Anthropic’s endpoint
-            const aiText = await invoke<string>("anthropic_completion", {
+            const aiText = await invokeWithAuth("anthropic_completion", {
                 request: anthropicRequest,
-            });
-            eventSystem.getEventBus().publish(
+            }, auth0);
+           eventSystem.getEventBus().publish(
                 "ai:response",
                 { text: aiText },
                 "anthropic_completion",
@@ -195,6 +199,6 @@ export class AnthropicService implements AIService {
 /**
  * If you prefer a factory style:
  */
-export const createAnthropicService = (config: AIServiceConfig): AIService => {
-    return new AnthropicService(config);
+export const createAnthropicService = (config: AIServiceConfig, auth0: Auth0ContextInterface): AIService => {
+    return new AnthropicService(config, auth0);
 };

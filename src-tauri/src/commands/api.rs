@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use tauri::command;
+use tauri::{command, State};
 use log::{error, info};
+use crate::config::AppConfig;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnthropicRequest {
@@ -16,7 +17,10 @@ pub struct AnthropicMessage {
 }
 
 #[command]
-pub async fn anthropic_completion(request: AnthropicRequest) -> Result<String, String> {
+pub async fn anthropic_completion(
+    request: AnthropicRequest,
+    config: State<'_, AppConfig>
+) -> Result<String, String> {
     info!("=== Starting Anthropic completion ===");
     info!("Incoming request: {}", serde_json::to_string_pretty(&request).unwrap_or_else(|_| "Failed to serialize request".to_string()));
     info!("Model: {}", request.model);
@@ -26,11 +30,10 @@ pub async fn anthropic_completion(request: AnthropicRequest) -> Result<String, S
         info!("Message {}: role='{}', content='{}'", i, msg.role, msg.content);
     }
 
-    let api_key = std::env::var("ANTHROPIC_API_KEY")
-        .map_err(|e| {
-            error!("Failed to get API key: {}", e);
-            "ANTHROPIC_API_KEY not set".to_string()
-        })?;
+    // Properly handle the Option<AnthropicConfig>
+    let api_key = config.anthropic.as_ref()
+        .ok_or_else(|| "Anthropic config missing in AppConfig".to_string())?
+        .api_key.as_str();
 
     let client = reqwest::Client::new();
     
@@ -44,8 +47,6 @@ pub async fn anthropic_completion(request: AnthropicRequest) -> Result<String, S
     info!("Prepared Anthropic API request: {}", 
         serde_json::to_string_pretty(&anthropic_request)
             .unwrap_or_else(|_| "Failed to serialize API request".to_string()));
-
-    info!("Sending request to Anthropic API");
     
     let response = client
         .post("https://api.anthropic.com/v1/messages")

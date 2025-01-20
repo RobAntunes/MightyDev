@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import IntegratedFileBrowser from './FileBrowser';
 import MonacoEditor from './MonacoEditor';
 import ResizablePanel from './ResizablePanel';
+import { invokeWithAuth } from '../lib/auth';
+import { useAuth0 } from '@auth0/auth0-react';
 
 interface FileSystemNode {
   id: string;
@@ -23,6 +24,8 @@ const IDEWorkspace: React.FC = () => {
   const [fileContent, setFileContent] = useState<string>('');
   const isMounted = useRef(true);
 
+  const auth0 = useAuth0();
+
   // Track component lifecycle
   useEffect(() => {
     isMounted.current = true;
@@ -36,7 +39,7 @@ const IDEWorkspace: React.FC = () => {
   const handleFileSelect = useCallback(async (node: FileSystemNode) => {
     if (node.type === 'file') {
       try {
-        const content = await invoke<string>('read_file', { path: node.path });
+        const content = await invokeWithAuth('read_file', { path: node.path}, auth0);
         if (isMounted.current) {
           setFileContent(content);
           setCurrentFile(node);
@@ -59,10 +62,10 @@ const IDEWorkspace: React.FC = () => {
     async (content: string) => {
       if (currentFile) {
         try {
-          await invoke('write_file', {
+          await invokeWithAuth('write_file', {
             path: currentFile.path,
             content,
-          });
+          }, auth0);
           console.log('File saved successfully');
         } catch (error) {
           console.error('Error saving file:', error);

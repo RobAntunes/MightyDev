@@ -1,283 +1,122 @@
-import { Event , EventBus } from '../events/eventBus';
+import { IAIAgent, AIAgentTask, AIAgentStateChangeEvent, AIAgentResult, AIAgentState } from "@/types/agents/base";
+import { EventBusAdapter, EventPayload } from "@/types/events";
+import { Message } from "@/types/messages";
+import { AIAgent } from "./Agent";
 
-// Types
-export type AgentType = 'architect' | 'programmer' | 'reviewer' | 'qa' | 'ui';
+export class OrchestratorAgent extends AIAgent {
+    private agents: Map<string, IAIAgent>;
+    private taskQueue: AIAgentTask[];
 
-export interface AgentTask {
-  id: string;
-  type: string;
-  priority: number;
-  input: any;
-  source: AgentType;
-  target: AgentType;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  result?: any;
-  error?: string;
-  createdAt: number;
-  updatedAt: number;
-}
+    constructor(eventBus: EventBusAdapter) {
+        super(
+            {
+                id: 'orchestrator',
+                name: 'System Orchestrator',
+                role: 'orchestrator',
+                version: '1.0',
+                capabilities: [
+                    {
+                        type: 'taskDistribution',
+                        description: 'Distributes tasks to specialized agents'
+                    },
+                    {
+                        type: 'agentCoordination',
+                        description: 'Coordinates multi-agent tasks'
+                    }
+                ],
+                maxConcurrentTasks: 10
+            },
+            eventBus
+        );
 
-export interface AgentState {
-  type: AgentType;
-  busy: boolean;
-  currentTask?: string;
-  lastActive: number;
-}
+        this.agents = new Map();
+        this.taskQueue = [];
 
-export interface ProjectContext {
-  goals: string[];
-  constraints: string[];
-  currentFiles: string[];
-  agentStates: Map<AgentType, AgentState>;
-  taskHistory: AgentTask[];
-}
-
-export class OrchestratorAgent {
-  private eventBus: EventBus;
-  private context: ProjectContext;
-  private taskQueue: AgentTask[];
-  private activeAgents: Map<AgentType, AgentState>;
-
-  constructor(eventBus: EventBus) {
-    this.eventBus = eventBus;
-    this.taskQueue = [];
-    this.activeAgents = new Map();
-    this.context = {
-      goals: [],
-      constraints: [],
-      currentFiles: [],
-      agentStates: new Map(),
-      taskHistory: []
-    };
-
-    this.initializeAgents();
-    this.setupEventListeners();
-  }
-
-  private initializeAgents() {
-    const agents: AgentType[] = ['architect', 'programmer', 'reviewer', 'qa', 'ui'];
-    agents.forEach(type => {
-      this.activeAgents.set(type, {
-        type,
-        busy: false,
-        lastActive: Date.now()
-      });
-    });
-  }
-
-  private setupEventListeners() {
-    // Listen for user input from chat
-    this.eventBus.subscribe<{ messageId: string; content: string }>('chat:message', 
-      (event: Event) => this.handleUserInput(event.payload));
-
-    // Listen for agent task completion
-    this.eventBus.subscribe<{ taskId: string; result: any }>('agent:task:completed',
-      (event: Event) => this.handleTaskCompletion(event.payload));
-
-    // Listen for agent task failure
-    this.eventBus.subscribe<{ taskId: string; error: string }>('agent:task:failed',
-      (event: Event) => this.handleTaskFailure(event.payload));
-
-    // Listen for context updates
-    this.eventBus.subscribe<Partial<ProjectContext>>('context:updated',
-      (event: Event) => this.updateContext(event.payload));
-  }
-
-  private async handleUserInput(payload: { messageId: string; content: string }) {
-    const input = payload.content;
-    
-    // Create initial architect task to analyze user input
-    const task: AgentTask = {
-      id: crypto.randomUUID(),
-      type: 'analyze_input',
-      priority: 1,
-      input,
-      source: 'architect',
-      target: 'architect',
-      status: 'pending',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-
-    this.taskQueue.push(task);
-    await this.processTaskQueue();
-  }
-
-  private async handleTaskCompletion(event: { taskId: string, result: any }) {
-    const { taskId, result } = event;
-    const task = this.findTask(taskId);
-    if (!task) return;
-
-    task.status = 'completed';
-    task.result = result;
-    task.updatedAt = Date.now();
-
-    // Free up the agent
-    const agent = this.activeAgents.get(task.target);
-    if (agent) {
-      agent.busy = false;
-      agent.currentTask = undefined;
-      agent.lastActive = Date.now();
+        this.initializeEventListeners();
     }
 
-    // Create follow-up tasks based on the result
-    const followUpTasks = this.createFollowUpTasks(task);
-    this.taskQueue.push(...followUpTasks);
-
-    // Update context
-    this.updateTaskHistory(task);
-
-    // Process next tasks
-    await this.processTaskQueue();
-  }
-
-  private async handleTaskFailure(event: { taskId: string, error: string }) {
-    const { taskId, error } = event;
-    const task = this.findTask(taskId);
-    if (!task) return;
-
-    task.status = 'failed';
-    task.error = error;
-    task.updatedAt = Date.now();
-
-    // Free up the agent
-    const agent = this.activeAgents.get(task.target);
-    if (agent) {
-      agent.busy = false;
-      agent.currentTask = undefined;
-      agent.lastActive = Date.now();
-    }
-
-    // Create recovery tasks if needed
-    const recoveryTasks = this.createRecoveryTasks(task);
-    this.taskQueue.push(...recoveryTasks);
-
-    // Update context
-    this.updateTaskHistory(task);
-
-    // Process next tasks
-    await this.processTaskQueue();
-  }
-
-  private findTask(taskId: string): AgentTask | undefined {
-    return this.taskQueue.find(t => t.id === taskId);
-  }
-
-  private createFollowUpTasks(completedTask: AgentTask): AgentTask[] {
-    const followUpTasks: AgentTask[] = [];
-
-    switch (completedTask.type) {
-      case 'analyze_input':
-        // Architect has analyzed, create tasks for implementation
-        if (completedTask.result.needsImplementation) {
-          followUpTasks.push({
-            id: crypto.randomUUID(),
-            type: 'implement_feature',
-            priority: 2,
-            input: completedTask.result.implementation,
-            source: 'architect',
-            target: 'programmer',
-            status: 'pending',
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-          });
-        }
-        break;
-
-      case 'implement_feature':
-        // Code was implemented, create review task
-        followUpTasks.push({
-          id: crypto.randomUUID(),
-          type: 'review_code',
-          priority: 2,
-          input: completedTask.result,
-          source: 'programmer',
-          target: 'reviewer',
-          status: 'pending',
-          createdAt: Date.now(),
-          updatedAt: Date.now()
+    private async initializeEventListeners(): Promise<void> {
+        // Listen for new tasks
+        await this.eventBus.subscribe('task:created', async (event: EventPayload<AIAgentTask>) => {
+            await this.enqueueTask(event.data);
         });
-        break;
 
-      // Add more cases as needed
+        // Listen for agent state changes
+        await this.eventBus.subscribe('agent:stateChanged', async (event: EventPayload<AIAgentStateChangeEvent>) => {
+            const { agentId, state } = event.data;
+            await this.handleAgentStateChange(agentId, state);
+        });
     }
 
-    return followUpTasks;
-  }
-
-  private createRecoveryTasks(failedTask: AgentTask): AgentTask[] {
-    // Create recovery tasks based on the failure type
-    const recoveryTasks: AgentTask[] = [];
-    
-    // If it's a critical task, create a high-priority retry
-    if (failedTask.priority === 1) {
-      recoveryTasks.push({
-        ...failedTask,
-        id: crypto.randomUUID(),
-        status: 'pending',
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
+    private async enqueueTask(task: AIAgentTask): Promise<void> {
+        this.taskQueue.push(task);
+        this.taskQueue.sort((a, b) => b.priority - a.priority);
+        await this.processQueue();
     }
 
-    return recoveryTasks;
-  }
+    private async processQueue(): Promise<void> {
+        if (this.taskQueue.length === 0) return;
 
-  private updateContext(update: Partial<ProjectContext>) {
-    this.context = {
-      ...this.context,
-      ...update
-    };
-  }
-
-  private updateTaskHistory(task: AgentTask) {
-    this.context.taskHistory.push(task);
-    // Keep only last 100 tasks for memory efficiency
-    if (this.context.taskHistory.length > 100) {
-      this.context.taskHistory.shift();
+        for (const task of this.taskQueue) {
+            const assignedAgent = await this.findAvailableAgent(task);
+            if (assignedAgent) {
+                this.taskQueue = this.taskQueue.filter(t => t.id !== task.id);
+                await assignedAgent.processTask(task);
+            }
+        }
     }
-  }
 
-  private async processTaskQueue() {
-    // Sort tasks by priority
-    this.taskQueue.sort((a, b) => a.priority - b.priority);
-
-    // Process pending tasks
-    for (const task of this.taskQueue) {
-      if (task.status !== 'pending') continue;
-
-      const targetAgent = this.activeAgents.get(task.target);
-      if (!targetAgent || targetAgent.busy) continue;
-
-      // Assign task to agent
-      targetAgent.busy = true;
-      targetAgent.currentTask = task.id;
-      task.status = 'processing';
-
-      // Publish task to agent
-      this.eventBus.publish(`agent:${task.target}:task`, task, 'orchestrator');
+    private async findAvailableAgent(task: AIAgentTask): Promise<IAIAgent | null> {
+        for (const agent of this.agents.values()) {
+            const state = agent.getState();
+            if (
+                state.status === 'idle' &&
+                state.currentTasks.length < agent.metadata.maxConcurrentTasks &&
+                this.canHandleTask(agent, task)
+            ) {
+                return agent;
+            }
+        }
+        return null;
     }
-  }
 
-  // Public methods for system interaction
-  public addTask(task: Omit<AgentTask, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
-    const newTask: AgentTask = {
-      ...task,
-      id: crypto.randomUUID(),
-      status: 'pending',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
+    private canHandleTask(agent: IAIAgent, task: AIAgentTask): boolean {
+        return agent.metadata.capabilities.some(cap => cap.type === task.type);
+    }
 
-    this.taskQueue.push(newTask);
-    this.processTaskQueue();
-  }
+    public registerAgent(agent: IAIAgent): void {
+        this.agents.set(agent.metadata.id, agent);
+    }
 
-  public getAgentState(type: AgentType): AgentState | undefined {
-    return this.activeAgents.get(type);
-  }
+    public async processTask(task: AIAgentTask): Promise<AIAgentResult> {
+        // Orchestrator's own task processing logic
+        return {
+            taskId: task.id,
+            success: true,
+            metrics: {
+                startTime: Date.now(),
+                endTime: Date.now()
+            }
+        };
+    }
 
-  public getContext(): ProjectContext {
-    return { ...this.context };
-  }
+    public async handleSystemMessage(message: Message): Promise<void> {
+        // Process system messages and potentially create new tasks
+        const task = await this.createTaskFromMessage(message);
+        if (task) {
+            await this.enqueueTask(task);
+        }
+    }
+
+    private async createTaskFromMessage(message: Message): Promise<AIAgentTask | null> {
+        // Transform system messages into tasks based on content analysis
+        // This is where we'll integrate with the foundation model
+        return null;
+    }
+
+    private async handleAgentStateChange(agentId: string, state: AIAgentState): Promise<void> {
+        if (state.status === 'idle') {
+            await this.processQueue();
+        }
+    }
 }

@@ -11,8 +11,7 @@ import {
     EventBusMetrics,
     EventMetrics,
 } from "../types/events";
-import { EventPayload } from "../types/events";
-import { EventBusAdapter } from "../classes/events/eventEmitter";
+import { EventPayload, EventBusAdapter } from "../types/events";
 
 interface EventSystemDevToolsProps {
     eventBus: EventBusAdapter;
@@ -82,10 +81,10 @@ const EventUI: React.FC<EventSystemDevToolsProps> = ({
                     ? prev.failedEvents + 1
                     : prev.failedEvents,
                 averageLatency:
-                    (prev.averageLatency * prev.totalEvents + metrics.latency) /
+                    (prev.averageLatency * prev.totalEvents + metrics.processingTime) /
                     (prev.totalEvents + 1),
                 retryRate:
-                    (prev.retryRate * prev.totalEvents + metrics.retryCount) /
+                    (prev.retryRate * prev.totalEvents + metrics.retryCount!) /
                     (prev.totalEvents + 1),
             }));
         };

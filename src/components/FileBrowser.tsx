@@ -1,24 +1,25 @@
 // File: components/FileBrowser.tsx
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  ChevronRight,
+  AlertTriangle,
   ChevronDown,
+  ChevronRight,
   FileText,
   Folder,
   Search,
   Sparkles,
-  AlertTriangle,
-} from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { sep } from '@tauri-apps/api/path';
-import FolderPicker from './FilePicker';
+} from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { sep } from "@tauri-apps/api/path";
+import FolderPicker from "./FilePicker";
+import { useAuth0 } from "@auth0/auth0-react";
+import { invokeWithAuth } from "../lib/auth";
 
 interface FileSystemNode {
   id: string;
   name: string;
-  type: 'file' | 'directory';
+  type: "file" | "directory";
   path: string;
   metadata: {
     createdAt: string;
@@ -42,23 +43,25 @@ interface FileBrowserProps {
 
 const FileBrowser: React.FC<FileBrowserProps> = ({
   onFileSelect,
-  className = ''
+  className = "",
 }) => {
-  const [rootPath, setRootPath] = useState<string>('.');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [rootPath, setRootPath] = useState<string>(".");
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [files, setFiles] = useState<FileSystemNode[]>([]);
   const [error, setError] = useState<FileSystemError | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  const auth0 = useAuth0();
+
   const loadDirectory = useCallback(async (path: string) => {
     try {
       setIsLoading(true);
-      const entries = await invoke<FileSystemNode[]>('read_directory', { path });
+      const entries = await invokeWithAuth("read_directory", { path }, auth0);
       if (path === rootPath) {
         setFiles(entries);
       } else {
-        setFiles(prev => updateChildren(prev, path, entries));
+        setFiles((prev) => updateChildren(prev, path, entries));
       }
       setError(null);
     } catch (err) {
@@ -71,14 +74,17 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   const updateChildren = (
     nodes: FileSystemNode[],
     parentPath: string,
-    newChildren: FileSystemNode[]
+    newChildren: FileSystemNode[],
   ): FileSystemNode[] => {
-    return nodes.map(node => {
+    return nodes.map((node) => {
       if (node.path === parentPath) {
         return { ...node, children: newChildren };
       }
       if (node.children) {
-        return { ...node, children: updateChildren(node.children, parentPath, newChildren) };
+        return {
+          ...node,
+          children: updateChildren(node.children, parentPath, newChildren),
+        };
       }
       return node;
     });
@@ -91,7 +97,7 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   }, [loadDirectory]);
 
   const handleFolderToggle = useCallback(async (path: string) => {
-    setExpandedPaths(prev => {
+    setExpandedPaths((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
         next.delete(path);
@@ -106,9 +112,13 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   // Setup file system watcher
   useEffect(() => {
     const setupWatcher = async () => {
-      const unlisten = await listen('fs-change', (event) => {
-        const { path, type } = event.payload as { path: string; type: 'create' | 'modify' | 'delete' };
-        const parentPath = path.substring(0, path.lastIndexOf(sep())) || rootPath;
+      const unlisten = await listen("fs-change", (event) => {
+        const { path, type } = event.payload as {
+          path: string;
+          type: "create" | "modify" | "delete";
+        };
+        const parentPath = path.substring(0, path.lastIndexOf(sep())) ||
+          rootPath;
         loadDirectory(parentPath);
       });
 
@@ -128,15 +138,20 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   const filterNodes = (nodes: FileSystemNode[]): FileSystemNode[] => {
     if (!searchTerm) return nodes;
 
-    return nodes.filter(node => {
-      const matchesName = node.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const hasMatchingChildren = node.children && filterNodes(node.children).length > 0;
+    return nodes.filter((node) => {
+      const matchesName = node.name.toLowerCase().includes(
+        searchTerm.toLowerCase(),
+      );
+      const hasMatchingChildren = node.children &&
+        filterNodes(node.children).length > 0;
       return matchesName || hasMatchingChildren;
     });
   };
 
   return (
-    <div className={`h-full flex flex-col bg-zinc-900/90 backdrop-blur-md border border-zinc-800/50 ${className}`}>
+    <div
+      className={`h-full flex flex-col bg-zinc-900/90 backdrop-blur-md border border-zinc-800/50 ${className}`}
+    >
       {/* Header Section */}
       <div className="p-3 space-y-3 border-b border-zinc-800/80">
         <FolderPicker onFolderSelect={handleFolderSelect} />
@@ -154,25 +169,31 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
 
       {/* File Tree Container */}
       <div className="flex-1 overflow-y-auto p-2">
-        {error ? (
-          <div className="p-4 bg-red-500/10 rounded-lg">
-            <div className="flex items-center gap-2 text-red-500">
-              <AlertTriangle className="w-4 h-4" />
-              <span className="text-sm font-medium">Error: {error.message}</span>
+        {error
+          ? (
+            <div className="p-4 bg-red-500/10 rounded-lg">
+              <div className="flex items-center gap-2 text-red-500">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  Error: {error.message}
+                </span>
+              </div>
             </div>
-          </div>
-        ) : isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <Sparkles className="w-5 h-5 text-lime-400 animate-spin" />
-          </div>
-        ) : (
-          <FileTree
-            nodes={filterNodes(files)}
-            expandedPaths={expandedPaths}
-            onToggle={handleFolderToggle}
-            onSelect={onFileSelect}
-          />
-        )}
+          )
+          : isLoading
+          ? (
+            <div className="flex items-center justify-center h-full">
+              <Sparkles className="w-5 h-5 text-lime-400 animate-spin" />
+            </div>
+          )
+          : (
+            <FileTree
+              nodes={filterNodes(files)}
+              expandedPaths={expandedPaths}
+              onToggle={handleFolderToggle}
+              onSelect={onFileSelect}
+            />
+          )}
       </div>
     </div>
   );
@@ -191,30 +212,30 @@ const FileTree: React.FC<FileTreeProps> = ({
   expandedPaths,
   onToggle,
   onSelect,
-  depth = 0
+  depth = 0,
 }) => {
   return (
     <>
-      {nodes.map(node => (
+      {nodes.map((node) => (
         <React.Fragment key={node.path}>
           <FileItem
             node={node}
             depth={depth}
             isOpen={expandedPaths.has(node.path)}
             onToggle={onToggle}
-            onSelect={onSelect || (() => { })}
+            onSelect={onSelect || (() => {})}
           />
-          {node.type === 'directory' &&
+          {node.type === "directory" &&
             node.children &&
             expandedPaths.has(node.path) && (
-              <FileTree
-                nodes={node.children}
-                expandedPaths={expandedPaths}
-                onToggle={onToggle}
-                onSelect={onSelect}
-                depth={depth + 1}
-              />
-            )}
+            <FileTree
+              nodes={node.children}
+              expandedPaths={expandedPaths}
+              onToggle={onToggle}
+              onSelect={onSelect}
+              depth={depth + 1}
+            />
+          )}
         </React.Fragment>
       ))}
     </>
@@ -234,9 +255,9 @@ const FileItem: React.FC<FileItemProps> = ({
   depth,
   isOpen,
   onToggle,
-  onSelect
+  onSelect,
 }) => {
-  const isFolder = node.type === 'directory';
+  const isFolder = node.type === "directory";
   const Icon = isFolder ? Folder : FileText;
 
   const handleClick = (e: React.MouseEvent) => {
@@ -254,20 +275,21 @@ const FileItem: React.FC<FileItemProps> = ({
         group flex items-center px-3 py-1.5 rounded-lg 
         transition-all duration-200 ease-in-out
         hover:bg-zinc-800/50 cursor-pointer
-        ${depth > 0 ? 'ml-4' : ''}
+        ${depth > 0 ? "ml-4" : ""}
       `}
       onClick={handleClick}
     >
       <div className="flex items-center space-x-2 flex-1">
         {isFolder && (
           <div className="w-4 h-4 flex items-center justify-center transition-transform duration-200">
-            {isOpen ?
-              <ChevronDown className="w-3 h-3 text-zinc-500" /> :
-              <ChevronRight className="w-3 h-3 text-zinc-500" />
-            }
+            {isOpen
+              ? <ChevronDown className="w-3 h-3 text-zinc-500" />
+              : <ChevronRight className="w-3 h-3 text-zinc-500" />}
           </div>
         )}
-        <Icon className={`w-4 h-4 ${isFolder ? 'text-lime-400' : 'text-zinc-500'}`} />
+        <Icon
+          className={`w-4 h-4 ${isFolder ? "text-lime-400" : "text-zinc-500"}`}
+        />
         <span className="text-sm font-light text-zinc-300">{node.name}</span>
       </div>
       <div className="hidden group-hover:flex items-center space-x-2 transition-opacity duration-200">

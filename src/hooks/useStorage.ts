@@ -1,57 +1,69 @@
 // src/hooks/useStorage.ts
 
-import { useCallback, useMemo } from 'react';
-import { StorageService } from '../services/db/rocksdb';
+import { useCallback, useMemo, useEffect, useState } from 'react';
+import { Storage, StorageService } from '../services/db/rocksdb';
 
 export function useStorage() {
-    const storage = useMemo(() => new StorageService(), []);
+    const [storageInitialized, setStorageInitialized] = useState<boolean>(false);
+    const [storageError, setStorageError] = useState<string | null>(null);
+
+    useEffect(() => {
+        try {
+            const storage = Storage.getDefault();
+            setStorageInitialized(true);
+        } catch (error) {
+            console.error('Storage not initialized:', error);
+            setStorageError('Storage not initialized. Please restart the application.');
+        }
+    }, []);
 
     const handleStorageError = useCallback((error: any) => {
         console.error('Storage operation failed:', error);
-        // You might want to show a toast notification or handle errors differently
+        // Implement user-facing error handling here (e.g., show a toast)
     }, []);
 
     const storeValue = useCallback(async (key: string, value: string) => {
         try {
-            await storage.store(key, value);
+            await Storage.getDefault().store(key, value);
         } catch (error) {
             handleStorageError(error);
             throw error;
         }
-    }, [storage, handleStorageError]);
+    }, [handleStorageError]);
 
     const getValue = useCallback(async (key: string) => {
         try {
-            return await storage.get(key);
+            return await Storage.getDefault().get(key);
         } catch (error) {
             handleStorageError(error);
             throw error;
         }
-    }, [storage, handleStorageError]);
+    }, [handleStorageError]);
 
     const storeJson = useCallback(async <T,>(key: string, value: T) => {
         try {
-            await storage.storeJson(key, value);
+            await Storage.getDefault().storeJson(key, value);
         } catch (error) {
             handleStorageError(error);
             throw error;
         }
-    }, [storage, handleStorageError]);
+    }, [handleStorageError]);
 
     const getJson = useCallback(async <T,>(key: string) => {
         try {
-            return await storage.getJson<T>(key);
+            return await Storage.getDefault().getJson<T>(key);
         } catch (error) {
             handleStorageError(error);
             throw error;
         }
-    }, [storage, handleStorageError]);
+    }, [handleStorageError]);
 
     return {
         storeValue,
         getValue,
         storeJson,
         getJson,
-        storage, // Expose the full service if needed
+        storageInitialized,
+        storageError,
     };
 }

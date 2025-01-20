@@ -68,7 +68,7 @@ export default function ChatInterface({
     <div className="flex flex-col h-full bg-zinc-900">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4">
-        {messages.map((message) => (
+        {messages?.map((message) => (
           <div
             key={message.id}
             className={`flex ${
