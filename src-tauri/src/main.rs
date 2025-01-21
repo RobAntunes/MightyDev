@@ -6,7 +6,6 @@ mod commands {
     pub mod fs;
     pub mod greptile;
     pub mod process_manager;
-    pub mod proxy;
     pub mod storage;
     pub mod terminal;
 }
@@ -22,33 +21,36 @@ mod context {
     pub mod context_manager;
 }
 
+use std::fs::create_dir_all;
 use auth::AppState;
 use bindings::{embed, python_runtime};
 use commands::*;
 use config::AppConfig;
-use std::env;
-use std::path::PathBuf;
+use log::info;
+use std::{env, path::PathBuf, sync::Arc};
 use tauri::{Listener, Manager};
-use tokio;
+use tokio::{self, sync::Mutex};
 
-async fn initialize_systems() -> Result<(), Box<dyn std::error::Error>> {
+async fn initialize_systems(shared_config: Arc<Mutex<AppConfig>>) -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize Python runtime
     python_runtime::initialize_python_runtime().await?;
+
     // Setup storage paths
     let app_dir = std::env::current_exe()?
         .parent()
         .map(|p| p.join("storage"))
         .unwrap_or(PathBuf::from("storage"));
 
-    println!("Initializing Storage Directory at: {}", app_dir.display());
+    info!("Initializing Storage Directory at: {}", app_dir.display());
 
-    std::fs::create_dir_all(&app_dir)?;
+    create_dir_all(&app_dir)?;
     let db_path = app_dir.join("storage.db");
 
-    println!("Database Path: {}", db_path.display());
+    info!("Database Path: {}", db_path.display());
 
     // Set DB_PATH environment variable to ensure consistency
     env::set_var("DB_PATH", db_path.to_str().unwrap());
-    println!("Set DB_PATH to: {}", env::var("DB_PATH").unwrap());
+    info!("Set DB_PATH to: {}", env::var("DB_PATH").unwrap());
 
     // Initialize storage system **before** ProcessManager
     commands::storage::initialize_storage(&db_path).await?;
@@ -68,23 +70,40 @@ async fn initialize_systems() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() {
-    fn cleanup_on_exit() {
-        tauri::async_runtime::spawn(async {
-            if let Err(e) = commands::process_manager::force_cleanup_locks().await {
-                eprintln!("Failed to cleanup locks: {}", e);
-            }
+/// Cleans up resources when the application exits.
+fn cleanup_on_exit() {
+    tauri::async_runtime::spawn(async {
+        if let Err(e) = commands::process_manager::force_cleanup_locks().await {
+            eprintln!("Failed to cleanup locks: {}", e);
+        }
 
-            if let Err(e) = commands::storage::cleanup_storage().await {
-                eprintln!("Failed to cleanup storage: {}", e);
-            }
+        if let Err(e) = commands::storage::cleanup_storage().await {
+            eprintln!("Failed to cleanup storage: {}", e);
+        }
 
-            if let Err(e) = commands::process_manager::cleanup_process_manager().await {
-                eprintln!("Failed to cleanup process manager: {}", e);
-            }
-        });
-    }
+        if let Err(e) = commands::process_manager::cleanup_process_manager().await {
+            eprintln!("Failed to cleanup process manager: {}", e);
+        }
+    });
+}
+
+fn main() {
+    // Initialize logging
+    env_logger::init();
+
+    // Load configuration
+    let config = match AppConfig::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    info!("Configuration loaded successfully.");
+
+    // Wrap config in Arc<Mutex<_>> for async access
+    let shared_config = Arc::new(Mutex::new(config));
 
     // Initialize and run the Tauri application
     tauri::Builder::default()
@@ -94,7 +113,10 @@ async fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
+        // Manage other app states
         .manage(AppState::new())
+        // Manage shared_config
+        .manage(shared_config.clone())
         // Register command handlers
         .invoke_handler(tauri::generate_handler![
             // Auth commands
@@ -118,8 +140,6 @@ async fn main() {
             terminal::write_to_terminal,
             terminal::resize_terminal,
             terminal::terminate_terminal_session,
-            // Proxy commands
-            proxy::proxy_request,
             // AI commands
             api::anthropic_completion,
             // Context commands
@@ -144,14 +164,11 @@ async fn main() {
             storage::cleanup_storage,
         ])
         // Setup window event handlers
-        .setup(|app| {
+        .setup(move |app| {
             let app_handle = app.handle();
             app_handle.listen("tauri://close-requested", move |_| {
                 cleanup_on_exit();
             });
-
-            let config = AppConfig::load()?;
-            app.manage(config);
 
             let main_window = app.get_webview_window("main").unwrap();
 
@@ -170,8 +187,10 @@ async fn main() {
                     }
                 });
             });
+
+            // Initialize systems asynchronously
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = initialize_systems().await {
+                if let Err(e) = initialize_systems(shared_config.clone()).await {
                     eprintln!("Failed to initialize systems: {}", e);
                     // Optionally, you can terminate the application or notify the user
                     // For example, you might want to exit the process:

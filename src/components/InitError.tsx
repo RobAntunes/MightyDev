@@ -1,4 +1,3 @@
-import { useProcessManager } from "@/hooks/useProcessManager";
 
 // Example React component using the hook
 interface InitializationErrorProps {
@@ -7,13 +6,7 @@ interface InitializationErrorProps {
 }
 
 export function InitializationError({ error, onResolved }: InitializationErrorProps) {
-    const { 
-        killOtherInstances, 
-        cleanupLocks, 
-        isKilling, 
-        isCleaning,
-        lastResult 
-    } = useProcessManager();
+
 
     const handleFixAttempt = async () => {
         try {

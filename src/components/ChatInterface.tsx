@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Message, MessageContent } from "../types/messages";
-import { AlertTriangle, RefreshCw, Send, Sparkles } from "lucide-react";
+// components/chat/ChatInterface.tsx
 
+import React, { useEffect, useRef, useState } from "react";
+import { AIMessage } from "../types/ai";
+import { AlertTriangle, RefreshCw, Send, Sparkles } from "lucide-react";
+import { MessageContent } from "../types/ai";
 interface ChatInterfaceProps {
-  messages?: Message[];
+  messages?: AIMessage[];
   onSendMessage: (content: string) => Promise<void>;
   isProcessing: boolean;
 }
@@ -29,39 +31,50 @@ export default function ChatInterface({
     setInputValue("");
   };
 
-  const renderMessageContent = (content: MessageContent) => {
-    switch (content.type) {
-      case "text":
-        return (
-          <div className="text-sm whitespace-pre-wrap">
-            {content.content}
-          </div>
-        );
-      case "code":
-        return (
-          <div className="mt-2 font-mono text-sm">
-            {content.title && (
-              <div className="text-xs text-zinc-500 mb-1">
-                {content.title}
-              </div>
-            )}
-            <pre className="bg-zinc-900/50 p-3 rounded-md overflow-x-auto">
-              <code className={`language-${content.language || 'plaintext'}`}>
-                {content.content}
-              </code>
-            </pre>
-          </div>
-        );
-      case "error":
-        return (
-          <div className="flex items-center gap-2 text-red-400">
-            <AlertTriangle className="w-4 h-4" />
-            <span>{content.content}</span>
-          </div>
-        );
-      default:
-        return null;
+  const renderContent = (content: MessageContent, index: number) => {
+    if (typeof content === "string") {
+      return (
+        <div key={index} className="text-sm whitespace-pre-wrap">
+          {content}
+        </div>
+      );
     }
+
+    // content is an array of objects
+    return content.map((c, idx) => {
+      switch (c.type) {
+        case "text":
+          return (
+            <div key={idx} className="text-sm whitespace-pre-wrap">
+              {c.content}
+            </div>
+          );
+        case "code":
+          return (
+            <div key={idx} className="mt-2 font-mono text-sm">
+              {c.title && (
+                <div className="text-xs text-zinc-500 mb-1">
+                  {c.title}
+                </div>
+              )}
+              <pre className="bg-zinc-900/50 p-3 rounded-md overflow-x-auto">
+                <code className={`language-${c.language || 'plaintext'}`}>
+                  {c.content}
+                </code>
+              </pre>
+            </div>
+          );
+        case "error":
+          return (
+            <div key={idx} className="flex items-center gap-2 text-red-400">
+              <AlertTriangle className="w-4 h-4" />
+              <span>{c.content}</span>
+            </div>
+          );
+        default:
+          return null;
+      }
+    });
   };
 
   return (
@@ -92,14 +105,17 @@ export default function ChatInterface({
                   </div>
                 )
                 : (
-                  message.content.map((
-                    content: MessageContent,
-                    index: number,
-                  ) => (
-                    <div key={`${message.id}-content-${index}`}>
-                      {renderMessageContent(content)}
-                    </div>
-                  ))
+                  // Handle both string and array content
+                  Array.isArray(message.content)
+                    ? message.content.map((
+                      _,
+                      idx: number,
+                    ) => (
+                      <div key={`${message.id}-content-${idx}`}>
+                        {renderContent(message.content, idx)}
+                      </div>
+                    ))
+                    : renderContent(message.content, 0)
                 )}
             </div>
           </div>

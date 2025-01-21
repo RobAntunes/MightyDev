@@ -1,37 +1,38 @@
 // src/services/ai/AnthropicService.ts
+
 import {
+    AIErrorEvent,
+    AIErrorPayload,
+    AIMessage,
+    AIRequestPayload,
+    AIResponsePayload,
     AIService,
     AIServiceConfig,
-    CompletionRequest,
-    CompletionResponse,
     CompletionStreamCallbacks,
     ConversationContext,
 } from "../../types/ai";
-import { Message } from "../../types/messages";
 import { eventSystem } from "../../classes/events/manager";
 import { invokeWithAuth } from "../../lib/auth";
-import { Auth0ContextInterface, withAuth0 } from "@auth0/auth0-react";
+import { Auth0ContextInterface } from "@auth0/auth0-react";
 
-// Each message must be { role: "user" | "assistant", content: string }
-interface AnthropicMessage {
-    role: "user" | "assistant";
-    content: string;
-}
-
-// This is the shape we send to Rust via `invoke("anthropic_completion")`
-interface AnthropicRequest {
+interface AnthropicResponse {
+    content: Array<{
+        text: string;
+        type: "text";
+    }>;
+    id: string;
     model: string;
-    max_tokens: number;
-    messages: AnthropicMessage[];
-    auth0: Auth0ContextInterface,
+    role: "assistant";
+    type: "message";
+    usage?: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 }
 
 export class AnthropicService implements AIService {
     private config: AIServiceConfig;
     private initialized = false;
-    public auth0 = {};
-
-    // If you no longer need context-tracking, feel free to remove
     private context: ConversationContext = {
         messages: [],
         metadata: {
@@ -45,125 +46,134 @@ export class AnthropicService implements AIService {
         },
     };
 
-    constructor(config: AIServiceConfig, auth0: Auth0ContextInterface) {
+    constructor(config: AIServiceConfig, private auth0: Auth0ContextInterface) {
         this.config = config;
-        this.auth0 = auth0;
     }
 
-    /**
-     * If you have any setup tasks (like validating config or keys),
-     * do them here. Otherwise, just mark the service as ready.
-     */
     async initialize(): Promise<void> {
-        // For example: validate that config.model?.model is set
         if (!this.config.model?.model) {
             console.warn(
                 "Warning: No model specified in config. Using default: claude-3-5-sonnet-20241022",
             );
+            this.config.model = this.config.model || {
+                model: "claude-3-5-sonnet-20241022",
+                provider: "anthropic",
+                maxTokens: 1024,
+            };
         }
         this.initialized = true;
     }
 
-    /**
-     * Convert each Message in your app’s format to Anthropic’s expected shape.
-     */
-    private transformMessage(msg: Message): AnthropicMessage {
-        // 1) Ensure msg.content is always an array
-        const contents = Array.isArray(msg.content)
-            ? msg.content
-            : [msg.content];
-        // 2) Filter & join text content
+    private transformMessage(
+        msg: AIMessage,
+    ): { role: string; content: string } {
+        let transformedContent: string;
+
+        if (Array.isArray(msg.content)) {
+            transformedContent = msg.content
+                .map((c) => {
+                    switch (c.type) {
+                        case "text":
+                            return c.content;
+                        case "error":
+                            return `Error: ${c.content}`;
+                        case "code":
+                            return `Code (${
+                                c.language || "plaintext"
+                            }):\n${c.content}`;
+                        default:
+                            return c.content;
+                    }
+                })
+                .join("\n");
+        } else {
+            transformedContent = msg.content;
+        }
 
         return {
-            role: msg.role === "user" ? "user" : "assistant",
-            content: contents.join("\n"),
+            role: msg.role,
+            content: transformedContent,
         };
     }
 
-    /**
-     * One-shot completion request using Anthropic’s API (via Tauri Rust command).
-     */
     async getCompletion(
-        request: CompletionRequest,
-        auth0: Auth0ContextInterface,
-    ): Promise<CompletionResponse> {
+        request: AIRequestPayload,
+    ): Promise<AIResponsePayload> {
         if (!this.initialized) {
             throw new Error("AnthropicService: Not initialized");
         }
 
         try {
-            // 1) Transform your messages to Anthropic’s shape
-            const anthropicMessages: AnthropicMessage[] = request.messages.map(
+            const anthropicMessages = request.messages.map(
                 (m) => this.transformMessage(m),
             );
-            console.log(anthropicMessages);
 
-            // 2) Build the request object
-            const anthropicRequest: AnthropicRequest = {
-                model: this.config.model?.model || "claude-3-5-sonnet-20241022",
-                max_tokens: request.maxTokens || 1024,
+            const anthropicRequest = {
+                id: request.id,
+                model: this.config.model.model,
+                max_tokens: this.config.model.maxTokens || 1024,
                 messages: anthropicMessages,
-                auth0
             };
 
             console.log("Sending to Anthropic:", anthropicRequest);
 
-            // 3) Call Tauri’s Rust command, which calls Anthropic’s endpoint
-            const aiText = await invokeWithAuth("anthropic_completion", {
-                request: anthropicRequest,
-            }, auth0);
-           eventSystem.getEventBus().publish(
-                "ai:response",
-                { text: aiText },
+            const response = await invokeWithAuth(
                 "anthropic_completion",
+                {
+                    request: anthropicRequest,
+                },
+                this.auth0,
+                true,
             );
-            // 4) Wrap the raw AI text in your standard `Message` shape
-            const aiMessage: Message = {
-                id: crypto.randomUUID(),
-                role: "assistant",
-                timestamp: new Date().toISOString(),
-                status: "complete",
-                content: [
-                    {
-                        type: "text",
-                        content: aiText,
-                    },
-                ],
+
+            const parsedResponse: AnthropicResponse = JSON.parse(response);
+
+            // Transform the Anthropic response to our internal format
+            const aiResponse: AIResponsePayload = {
+                id: request.id,
+                text: parsedResponse.content[0]?.text || "",
+                model: parsedResponse.model,
+                usage: parsedResponse.usage
+                    ? {
+                        input_tokens: parsedResponse.usage.input_tokens,
+                        output_tokens: parsedResponse.usage.output_tokens
+                    }
+                    : undefined,
             };
 
-            // 5) Return a `CompletionResponse`
-            return {
-                message: aiMessage,
-                usage: {
-                    promptTokens: 0,
-                    completionTokens: 0,
-                    totalTokens: 0,
-                },
-            };
-        } catch (error) {
-            console.error(
-                error,
+            // Publish response event
+            await eventSystem.getEventBus().publish(
+                "ai:response",
+                aiResponse,
+                "anthropic_completion",
             );
-            throw error;
+
+            return aiResponse;
+        } catch (error: any) {
+            console.error("AnthropicService getCompletion error:", error);
+
+            // Publish error event with request ID
+            const errorEvent: AIErrorPayload = {
+                ...error,
+            };
+
+            await eventSystem.getEventBus().publish(
+                "ai:error",
+                errorEvent,
+                "anthropic_completion",
+            );
+
+            throw new Error(error.message || "Unknown error occurred");
         }
     }
 
-    /**
-     * Streaming is not implemented yet.
-     * (If you eventually want to do SSE or token streaming, implement here.)
-     */
     async streamCompletion(
-        _request: CompletionRequest,
+        _request: AIRequestPayload,
         _callbacks: CompletionStreamCallbacks,
     ): Promise<void> {
         throw new Error("AnthropicService: Streaming not implemented");
     }
 
-    /**
-     * (Optional) If you want to store conversation context (messages, tokens, etc.)
-     * between calls, update it here.
-     * You can remove if you don’t need any session context logic.
-     */
     updateContext(newContext: Partial<ConversationContext>): void {
         this.context = {
             ...this.context,
@@ -196,9 +206,9 @@ export class AnthropicService implements AIService {
     }
 }
 
-/**
- * If you prefer a factory style:
- */
-export const createAnthropicService = (config: AIServiceConfig, auth0: Auth0ContextInterface): AIService => {
+export function createAnthropicService(
+    config: AIServiceConfig,
+    auth0: Auth0ContextInterface,
+): AIService {
     return new AnthropicService(config, auth0);
-};
+}

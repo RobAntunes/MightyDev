@@ -1,9 +1,9 @@
 // src/services/init.ts
 
 import { eventSystem } from "../classes/events/manager";
-import { ContextService } from "../services/context/Context";
 import { startAIRequestHandler } from "../handlers/ai";
-import * as path from "@tauri-apps/api/path";
+import { Auth0ContextInterface } from "@auth0/auth0-react";
+import { StorageService } from "./db/rocksdb";
 
 interface InitializerOptions {
     maxRetries: number;
@@ -26,7 +26,7 @@ interface SystemComponent {
     dependencies: string[];
     isOptional?: boolean;
     timeout?: number;
-    cleanup?: () => Promise<void>; // Add this line
+    cleanup?: () => Promise<void>;
 }
 
 export class SystemInitializer {
@@ -36,8 +36,13 @@ export class SystemInitializer {
     private initialized: Set<string>;
     private options: InitializerOptions;
     private initPromise: Promise<void> | null = null;
+    private auth0: Auth0ContextInterface;
 
-    private constructor(options: Partial<InitializerOptions> = {}) {
+    private constructor(
+        auth0: Auth0ContextInterface,
+        options: Partial<InitializerOptions> = {},
+    ) {
+        this.auth0 = auth0;
         this.state = {
             isInitializing: false,
             isInitialized: false,
@@ -59,16 +64,17 @@ export class SystemInitializer {
     }
 
     public static getInstance(
+        auth0: Auth0ContextInterface,
         options?: Partial<InitializerOptions>,
     ): SystemInitializer {
         if (!SystemInitializer.instance) {
-            SystemInitializer.instance = new SystemInitializer(options);
+            SystemInitializer.instance = new SystemInitializer(auth0, options);
         }
         return SystemInitializer.instance;
     }
 
     private registerCoreComponents(): void {
-        // Event System - No dependencies (since ProcessManager is now backend-managed)
+        // Event System - Depends on storage
         this.registerComponent({
             name: "eventSystem",
             dependencies: [],
@@ -81,14 +87,14 @@ export class SystemInitializer {
             },
         });
 
-        // AI Handler
+        // AI Handler - Depends on event system
         this.registerComponent({
             name: "aiHandler",
             dependencies: ["eventSystem"],
             init: async () => {
-              await startAIRequestHandler();
+                await startAIRequestHandler(this.auth0);
             },
-        });        
+        });
     }
 
     public registerComponent(component: SystemComponent): void {
@@ -102,7 +108,6 @@ export class SystemInitializer {
         name: string,
         visited: Set<string> = new Set(),
     ): Promise<void> {
-        // Check for circular dependencies
         if (visited.has(name)) {
             throw new Error(
                 `Circular dependency detected: ${
@@ -111,7 +116,6 @@ export class SystemInitializer {
             );
         }
 
-        // Skip if already initialized
         if (this.initialized.has(name)) {
             return;
         }
@@ -121,15 +125,12 @@ export class SystemInitializer {
             throw new Error(`Component ${name} not found`);
         }
 
-        // Track visited components for cycle detection
         visited.add(name);
 
-        // Initialize dependencies first
         for (const dep of component.dependencies) {
             await this.initializeComponent(dep, new Set(visited));
         }
 
-        // Initialize the component with timeout
         try {
             await Promise.race([
                 component.init(),
@@ -170,11 +171,9 @@ export class SystemInitializer {
             this.state.isInitializing = true;
 
             try {
-                // Initialize all registered components in dependency order
                 for (const [name] of this.components) {
                     await this.initializeComponent(name);
                 }
-
                 this.state.isInitialized = true;
                 this.state.error = null;
             } catch (error) {
@@ -192,7 +191,6 @@ export class SystemInitializer {
     }
 
     public async cleanup(): Promise<void> {
-        // Cleanup in reverse initialization order
         const componentsArray = Array.from(this.initialized).reverse();
 
         for (const name of componentsArray) {
@@ -206,15 +204,10 @@ export class SystemInitializer {
             }
         }
 
-        // Reset state
         this.initialized.clear();
         this.state.isInitialized = false;
         this.state.isInitializing = false;
         this.state.error = null;
-    }
-
-    public isInitialized(): boolean {
-        return this.state.isInitialized;
     }
 
     public getError(): Error | null {

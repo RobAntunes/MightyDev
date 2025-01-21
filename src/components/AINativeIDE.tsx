@@ -19,11 +19,9 @@ import TerminalManager from "./Terminal";
 import "../global.css";
 import EventUI from "./EventUI";
 import ChatWorkspace from "./ChatWorkspace";
-import StorageTest from "./test";
 import Context from "./Context";
 import { eventSystem } from "../classes/events/manager";
 import { useAuthSetup } from "../hooks/useAuthInit";
-import { Storage } from "../services/db/rocksdb";
 
 const AINativeIDE: React.FC = () => {
   const auth0 = useAuth0();
@@ -62,20 +60,6 @@ const AINativeIDE: React.FC = () => {
         : TERMINAL_MIN_SIZE
     );
   };
-
-  useEffect(() => {
-    try {
-      // Initialize the StorageService with desired options
-      Storage.initialize({
-        retryAttempts: 5,
-        retryDelay: 2000, // milliseconds
-      });
-      console.log("StorageService initialized successfully.");
-    } catch (error) {
-      console.error("Failed to initialize StorageService:", error);
-      // Optionally, handle the error (e.g., show a notification to the user)
-    }
-  }, []);
 
   // Display Loading Indicator during auth or initialization
   if (isLoading) {
@@ -214,15 +198,9 @@ const AINativeIDE: React.FC = () => {
                   <IDEWorkspace />
                 </div>
               )
-              : activeMode === "events"
-              ? (
-                <div className="bg-zinc-900/80 backdrop-blur-md p-4 h-full overflow-auto">
-                  <EventUI eventBus={eventSystem.getEventBus()} />
-                </div>
-              )
               : (
                 <div className="bg-zinc-900/80 backdrop-blur-md p-4 h-full overflow-auto">
-                  <StorageTest />
+                  <EventUI eventBus={eventSystem.getEventBus()} />
                 </div>
               )}
           </div>

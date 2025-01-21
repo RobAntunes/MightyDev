@@ -1,7 +1,7 @@
-// src/services/db/rocksdb.ts
+// src/services/storage/StorageService.ts
 
-import { Auth0ContextInterface } from "@auth0/auth0-react";
-import { invokeWithAuth } from "../../lib/auth"
+import { Auth0Context, Auth0ContextInterface } from "@auth0/auth0-react";
+import { invokeWithAuth } from "../../lib/auth";
 
 export interface StorageError {
     code: string;
@@ -15,18 +15,28 @@ export interface StorageOptions {
 
 export class StorageService {
     private static instance: StorageService | null = null;
+    private initialized: boolean = false;
     private options: Required<StorageOptions>;
+    private auth0: Auth0ContextInterface;
 
-    private constructor(options: StorageOptions = {}) {
+    private constructor(
+        auth0: Auth0ContextInterface,
+        options: StorageOptions = {},
+    ) {
+        this.auth0 = auth0;
         this.options = {
             retryAttempts: options.retryAttempts ?? 3,
             retryDelay: options.retryDelay ?? 1000,
         };
     }
 
-    public static getInstance(options?: StorageOptions): StorageService {
+    public static getInstance(
+        auth0: Auth0ContextInterface,
+        options?: StorageOptions,
+    ): StorageService {
         if (!StorageService.instance) {
-            StorageService.instance = new StorageService(options);
+            StorageService.instance = new StorageService(auth0, options);
+            this.instance!.toggleInitialized();
         }
         return StorageService.instance;
     }
@@ -34,10 +44,15 @@ export class StorageService {
     private async withRetry<T>(
         operation: () => Promise<T>,
     ): Promise<T> {
-        let lastError: Error | null = null;
+        if (!this.initialized) {
+            throw new Error("Storage service not initialized");
+        }
 
+        let lastError: Error | null = null;
         for (
-            let attempt = 1; attempt <= this.options.retryAttempts; attempt++
+            let attempt = 1;
+            attempt <= this.options.retryAttempts;
+            attempt++
         ) {
             try {
                 return await operation();
@@ -50,88 +65,63 @@ export class StorageService {
                 }
             }
         }
-
         throw lastError;
     }
 
     public async store(
         key: string,
         value: string,
-        auth0: Auth0ContextInterface,
     ): Promise<void> {
         return this.withRetry(() =>
-            invokeWithAuth("store_value", { key, value }, auth0)
+            invokeWithAuth("store_value", { key, value }, this.auth0)
         );
     }
+
     public async get(
         key: string,
-        auth0: Auth0ContextInterface,
     ): Promise<string | null> {
         return this.withRetry(() =>
-            invokeWithAuth("get_value", { key }, auth0)
+            invokeWithAuth("get_value", { key }, this.auth0)
         );
     }
 
     public async delete(
         key: string,
-        auth0: Auth0ContextInterface,
     ): Promise<void> {
         return this.withRetry(() =>
-            invokeWithAuth("delete_value", { key }, auth0)
+            invokeWithAuth("delete_value", { key }, this.auth0)
         );
     }
 
     public async scanPrefix(
         prefix: string,
-        auth0: Auth0ContextInterface,
     ): Promise<Array<[string, string]>> {
         return this.withRetry(() =>
-            invokeWithAuth("scan_prefix", {
-                prefix,
-            }, auth0)
+            invokeWithAuth("scan_prefix", { prefix }, this.auth0)
         );
     }
 
     public async storeJson<T>(
         key: string,
         value: T,
-        auth0: Auth0ContextInterface,
     ): Promise<void> {
         const serialized = JSON.stringify(value);
-        return this.store(key, serialized, auth0);
+        return this.store(key, serialized);
     }
 
     public async getJson<T>(
         key: string,
-        auth0: Auth0ContextInterface,
     ): Promise<T | null> {
-        const result = await this.get(key, auth0);
+        const result = await this.get(key);
         if (result === null) return null;
         return JSON.parse(result) as T;
     }
-}
-
-// Storage namespace
-export namespace Storage {
-    export interface Options extends StorageOptions {}
-    export interface Error extends StorageError {}
-
-    let defaultInstance: StorageService | null = null;
-
-    export function initialize(options?: Options): StorageService {
-        if (!defaultInstance) {
-            defaultInstance = StorageService.getInstance(options);
-            console.log("StorageService initialized.");
-        }
-        return defaultInstance;
+    public toggleInitialized() {
+        this.initialized = !this.initialized;
+        return this;
     }
 
-    export function getDefault(): StorageService {
-        if (!defaultInstance) {
-            throw new Error(
-                "Storage not initialized. Call initialize() first.",
-            );
-        }
-        return defaultInstance;
+    public isInitialized(): boolean {
+        return this.initialized;
     }
 }

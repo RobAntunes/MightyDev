@@ -1,11 +1,11 @@
-import { Message } from './messages';
+import { AIMessage } from './ai';
 
 export interface Chat {
   id: string;
   title: string;
   createdAt: string;
   updatedAt: string;
-  messages: Message[];
+  messages: AIMessage[];
   metadata?: {
     description?: string;
     tags?: string[];

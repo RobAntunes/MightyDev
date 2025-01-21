@@ -1,10 +1,16 @@
+// src-tauri/src/commands/api.rs
+
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
-use log::{error, info};
+use tauri::State;
+use tokio::sync::Mutex;
+use std::sync::Arc;
 use crate::config::AppConfig;
+use log::{error, info};
+use reqwest;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnthropicRequest {
+    pub id: String,
     pub model: String,
     pub max_tokens: i32,
     pub messages: Vec<AnthropicMessage>,
@@ -16,44 +22,70 @@ pub struct AnthropicMessage {
     pub content: String,
 }
 
-#[command]
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicContent {
+    text: String,
+    #[serde(rename = "type")]
+    content_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicResponse {
+    content: Vec<AnthropicContent>,
+    id: String,
+    model: String,
+    role: String,
+    #[serde(rename = "type")]
+    response_type: String,
+    usage: Option<AnthropicUsage>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicUsage {
+    input_tokens: u32,
+    output_tokens: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ApiResponse {
+    id: String,
+    text: String,
+    model: String,
+    usage: Option<AnthropicUsage>,
+}
+
+#[tauri::command]
 pub async fn anthropic_completion(
     request: AnthropicRequest,
-    config: State<'_, AppConfig>
+    config: State<'_, Arc<Mutex<AppConfig>>>,
 ) -> Result<String, String> {
     info!("=== Starting Anthropic completion ===");
-    info!("Incoming request: {}", serde_json::to_string_pretty(&request).unwrap_or_else(|_| "Failed to serialize request".to_string()));
-    info!("Model: {}", request.model);
-    info!("Messages count: {}", request.messages.len());
+    info!("Incoming request ID: {}", request.id);
     
-    for (i, msg) in request.messages.iter().enumerate() {
-        info!("Message {}: role='{}', content='{}'", i, msg.role, msg.content);
-    }
-
-    // Properly handle the Option<AnthropicConfig>
-    let api_key = config.anthropic.as_ref()
-        .ok_or_else(|| "Anthropic config missing in AppConfig".to_string())?
-        .api_key.as_str();
+    let config_guard = config.lock().await;
+    let api_key = match &config_guard.anthropic {
+        Some(anthropic) => anthropic.api_key.as_str(),
+        None => {
+            error!("Anthropic config missing in AppConfig");
+            return Err("Anthropic API key not configured.".to_string());
+        }
+    };
 
     let client = reqwest::Client::new();
-    
-    // Construct the Anthropic API request
-    let anthropic_request = serde_json::json!({
+
+    let anthropic_api_request = serde_json::json!({
         "model": request.model,
         "max_tokens": request.max_tokens,
         "messages": request.messages,
     });
-    
-    info!("Prepared Anthropic API request: {}", 
-        serde_json::to_string_pretty(&anthropic_request)
-            .unwrap_or_else(|_| "Failed to serialize API request".to_string()));
-    
+
+    info!("Sending request to Anthropic API");
     let response = client
         .post("https://api.anthropic.com/v1/messages")
         .header("x-api-key", api_key)
+        .header("Content-Type", "application/json")
         .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&anthropic_request)
+        .json(&anthropic_api_request)
         .send()
         .await
         .map_err(|e| {
@@ -68,10 +100,7 @@ pub async fn anthropic_completion(
     })?;
 
     if !status.is_success() {
-        error!("API request failed!");
-        error!("Status code: {}", status);
-        error!("Response body: {}", response_text);
-        error!("Request body: {}", serde_json::to_string_pretty(&anthropic_request).unwrap());
+        error!("API request failed with status {}: {}", status, response_text);
         return Err(format!(
             "API request failed with status {}: {}",
             status,
@@ -79,24 +108,29 @@ pub async fn anthropic_completion(
         ));
     }
 
-    info!("Received response from Anthropic API: {}", response_text);
+    info!("Received response from Anthropic API");
+    let anthropic_response: AnthropicResponse = serde_json::from_str(&response_text)
+        .map_err(|e| {
+            error!("Failed to parse response JSON: {}", e);
+            e.to_string()
+        })?;
 
-    let response_json: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
-        error!("Failed to parse response JSON: {}", e);
+    // Transform the response to match our expected format
+    let api_response = ApiResponse {
+        id: request.id,
+        text: anthropic_response.content
+            .first()
+            .map(|c| c.text.clone())
+            .unwrap_or_default(),
+        model: anthropic_response.model,
+        usage: anthropic_response.usage,
+    };
+
+    let response_json = serde_json::to_string(&api_response).map_err(|e| {
+        error!("Failed to serialize response: {}", e);
         e.to_string()
     })?;
 
-    // Extract the content from the response
-    let content = response_json["content"]
-        .as_array()
-        .and_then(|arr| arr.first())
-        .and_then(|content| content["text"].as_str())
-        .ok_or_else(|| {
-            let error = "Invalid response format from Anthropic API";
-            error!("{}", error);
-            error.to_string()
-        })?;
-
     info!("Successfully processed Anthropic completion");
-    Ok(content.to_string())
+    Ok(response_json)
 }

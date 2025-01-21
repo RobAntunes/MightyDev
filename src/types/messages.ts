@@ -1,153 +1,71 @@
-// types/messages.ts
+// src/types/messages.ts
 
-export type MessageRole = "user" | "assistant" | "system";
+import { AIMessage, MessageContent } from "./ai";
 
-export type MessageStatus = "pending" | "complete" | "error";
+/**
+ * Generates a unique identifier for messages.
+ */
+export const generateUUID = (): string => {
+    return crypto.randomUUID();
+};
 
-export interface MessageContent {
-  type: "text" | "code" | "error";
-  content: string;
-  language?: string; // For code blocks
-  title?: string; // For code blocks or errors
-}
-
-export interface Message {
-  id: string;
-  role: MessageRole;
-  content: MessageContent[];
-  timestamp: string; // ISO 8601 string format
-  status: MessageStatus;
-  metadata?: {
-    processingTime?: number;
-    model?: string;
-    tokens?: {
-      input: number;
-      output: number;
-      total: number;
+/**
+ * Creates a user message.
+ * @param content - The content of the user message.
+ * @returns An AIMessage object representing the user message.
+ */
+export function createUserMessage(content: string): AIMessage {
+    return {
+        id: generateUUID(),
+        role: "user",
+        content: [{ type: "text", content }], // Changed to array for consistency
+        timestamp: new Date().toISOString(),
+        status: "complete",
     };
-    error?: {
-      code: string;
-      message: string;
-      details?: unknown;
+}
+
+/**
+ * Creates a pending assistant message.
+ * @returns An AIMessage object representing a pending assistant message.
+ */
+export function createPendingAssistantMessage(): AIMessage {
+    return {
+        id: generateUUID(),
+        role: "assistant",
+        content: [{ type: "text", content: "Thinking..." }], // Changed to array
+        timestamp: new Date().toISOString(),
+        status: "pending",
     };
-  };
 }
 
-export interface CompletionRequest {
-  id: string;
-  messages: Message[];
-  maxTokens?: number;
+/**
+ * Creates an assistant message.
+ * @param content - The content of the assistant message. Can be a string or array of objects.
+ * @param id - The ID to associate with this message (typically the pending message's ID).
+ * @returns An AIMessage object representing the assistant message.
+ */
+export function createAssistantMessage(content: MessageContent, id: string): AIMessage {
+    return {
+        id, // Use the existing pending message ID
+        role: "assistant",
+        content: typeof content === "string" ? [{ type: "text", content }] : content,
+        timestamp: new Date().toISOString(),
+        status: "complete",
+    };
 }
 
-export interface ChatRequest {
-  messages: string[];
-  maxTokens?: number;
-  model?: string;
-}
-
-export interface ChatResponse {
-  message: Message;
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-  };
-}
-
-export interface ErrorResponse {
-  error: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
-
-// Helper functions
-export function createUserMessage(content: string): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: "user",
-    content: [{
-      type: "text",
-      content,
-    }],
-    timestamp: new Date().toISOString(),
-    status: "complete",
-  };
-}
-
-export function createPendingAssistantMessage(): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content: [{
-      type: "text",
-      content: "Thinking...",
-    }],
-    timestamp: new Date().toISOString(),
-    status: "pending",
-  };
-}
-
-export function createErrorMessage(error: Error | string): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content: [{
-      type: "error",
-      content: typeof error === "string" ? error : error.message,
-    }],
-    timestamp: new Date().toISOString(),
-    status: "error",
-    metadata: {
-      error: {
-        code: "PROCESSING_ERROR",
-        message: typeof error === "string" ? error : error.message,
-      },
-    },
-  };
-}
-
-export function createAssistantMessage(content: string): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content: [{
-      type: "text",
-      content,
-    }],
-    timestamp: new Date().toISOString(),
-    status: "complete",
-  };
-}
-
-export function addCodeBlockToMessage(
-  message: Message,
-  code: string,
-  language: string,
-  title?: string,
-): Message {
-  return {
-    ...message,
-    content: [
-      ...message.content,
-      {
-        type: "code",
-        content: code,
-        language,
-        title,
-      },
-    ],
-  };
-}
-
-// Type guards
-export function isErrorResponse(
-  response: ChatResponse | ErrorResponse,
-): response is ErrorResponse {
-  return "error" in response;
-}
-
-export function isCodeBlock(content: MessageContent): boolean {
-  return content.type === "code";
+/**
+ * Creates an error message.
+ * @param error - The error message content.
+ * @param id - The ID to associate with this message (typically the pending message's ID).
+ * @returns An AIMessage object representing the error message.
+ */
+export function createErrorMessage(error: string, id: string): AIMessage {
+    return {
+        id, // Use the existing pending message ID
+        role: "assistant",
+        content: [{ type: "error", content: error }],
+        timestamp: new Date().toISOString(),
+        status: "error",
+    };
 }
